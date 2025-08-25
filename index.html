@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watermark-It</title>
+  <link rel="stylesheet" href="style/styles.css">
+</head>
+<body>
+  <header>
+    <h1>Watermark-It</h1>
+    <p>Add your business watermark to property photos with ease.</p>
+  </header>
+  <main>
+    <div class="upload-section">
+      <label for="file-input" class="file-label">Upload Photos or ZIP File:</label>
+      <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.zip">
+    </div>
+    <div class="watermark-preview">
+      <img id="watermark-image" src="assets/logo-watermark.png" alt="Watermark Preview">
+      <p>Default Watermark Preview</p>
+      <button id="change-watermark">Change Watermark</button>
+      <input type="file" id="watermark-input" accept=".png,.jpg,.jpeg" hidden>
+    </div>
+    <button id="process-photos" disabled>Process Photos</button>
+    <div id="download-section" hidden>
+      <a id="download-link" href="#">Download Watermarked Photos (ZIP)</a>
+    </div>
+  </main>
+  <footer>
+    <p>© 2025 Watermark-It. All rights reserved.</p>
+  </footer>
+  <script src="scripts/app.js"></script>
+</body>
+</html>
