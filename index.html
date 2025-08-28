@@ -1,193 +1,337 @@
 <!DOCTYPE html>
-<html lang="en">
-  <dev>Fort Lowell Realty & Property Management</dev>
+<html lang="en"> 
+    <dev>Fort Lowell Realty & Property Management</dev>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watermark-It Pro</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watermark-It | Professional Image Watermarking Tool</title>
+  <meta name="description" content="Professional image watermarking tool with live preview, batch processing, and modern interface.">
+  
+  <!-- Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  
+  <!-- Styles -->
+  <link rel="stylesheet" href="style/styles.css">
+  
+  <!-- External Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.3/dist/heic2any.min.js"></script>
 </head>
 <body>
-    <div class="theme-toggle">
-        <button id="theme-toggle" aria-label="Toggle dark mode">
-            <i class="fas fa-moon"></i>
+  <!-- Navigation Header -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <div class="nav-logo">
+        <div class="logo-icon">
+          <i class="fas fa-image"></i>
+        </div>
+        <h1>Watermark-It</h1>
+      </div>
+      <div class="nav-actions">
+        <button class="nav-btn" id="help-btn">
+          <i class="fas fa-question-circle"></i>
+          <span>Help</span>
         </button>
+        <button class="nav-btn" id="theme-toggle">
+          <i class="fas fa-moon"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-text">
+        <h2>Professional Image Watermarking</h2>
+        <p>Add watermarks to your images with precision. Support for batch processing, live preview, and multiple formats.</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat">
+          <i class="fas fa-images"></i>
+          <span>Batch Process</span>
+        </div>
+        <div class="stat">
+          <i class="fas fa-eye"></i>
+          <span>Live Preview</span>
+        </div>
+        <div class="stat">
+          <i class="fas fa-download"></i>
+          <span>ZIP Download</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Application -->
+  <main class="main-container">
+    <!-- Progress Steps -->
+    <div class="progress-steps">
+      <div class="step active" data-step="1">
+        <div class="step-number">1</div>
+        <span>Upload Images</span>
+      </div>
+      <div class="step" data-step="2">
+        <div class="step-number">2</div>
+        <span>Configure Watermark</span>
+      </div>
+      <div class="step" data-step="3">
+        <div class="step-number">3</div>
+        <span>Preview & Process</span>
+      </div>
     </div>
 
-    <header class="header">
-        <div class="header-content">
-            <div class="logo">
+    <!-- Content Grid -->
+    <div class="content-grid">
+      <!-- Left Panel -->
+      <div class="left-panel">
+        <!-- File Upload Card -->
+        <div class="card upload-card">
+          <div class="card-header">
+            <h3>
+              <i class="fas fa-cloud-upload-alt"></i>
+              Upload Images
+            </h3>
+            <div class="file-counter">
+              <span id="file-count">0</span> files selected
+            </div>
+          </div>
+          
+          <div id="drop-zone" class="drop-zone">
+            <div class="drop-zone-content">
+              <div class="drop-icon">
+                <i class="fas fa-cloud-upload-alt"></i>
+              </div>
+              <h4>Drag & Drop Images Here</h4>
+              <p>or click to browse files</p>
+              <div class="file-types">
+                <span class="file-type">JPG</span>
+                <span class="file-type">PNG</span>
+                <span class="file-type">HEIC</span>
+                <span class="file-type">ZIP</span>
+              </div>
+            </div>
+            <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.heic,.zip" multiple hidden>
+          </div>
+          
+          <div id="file-list" class="file-list"></div>
+        </div>
+
+        <!-- Watermark Settings Card -->
+        <div class="card settings-card">
+          <div class="card-header">
+            <h3>
+              <i class="fas fa-cog"></i>
+              Watermark Settings
+            </h3>
+          </div>
+          
+          <div class="settings-content">
+            <!-- Watermark Image Section -->
+            <div class="setting-group">
+              <label class="setting-label">
                 <i class="fas fa-image"></i>
-                <h1>Watermark-It Pro</h1>
-            </div>
-            <p>FLR watermarking solution for marketing photos</p>
-        </div>
-        <div class="header-wave"></div>
-    </header>
-
-    <main class="main-container">
-        <section class="upload-section">
-            <div class="section-header">
-                <h2><i class="fas fa-cloud-upload-alt"></i> Upload Files</h2>
-                <p>Drag & drop your photos or browse to select files</p>
-            </div>
-            
-            <div class="upload-area" id="upload-area">
-                <div class="upload-content">
-                    <i class="fas fa-file-image upload-icon"></i>
-                    <h3>Drop your files here</h3>
-                    <p>Supports JPG, PNG, and ZIP files</p>
-                    <button class="btn btn-secondary" onclick="document.getElementById('file-input').click()">
-                        <i class="fas fa-folder-open"></i> Browse Files
-                    </button>
+                Watermark Image
+              </label>
+              <div class="watermark-upload-section">
+                <div class="watermark-preview-container">
+                  <img id="watermark-preview" src="assets/logo-watermark.png" alt="Watermark Preview">
+                  <div class="watermark-overlay">
+                    <i class="fas fa-edit"></i>
+                  </div>
                 </div>
-                <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.zip" hidden>
-            </div>
-
-            <div class="file-list" id="file-list"></div>
-        </section>
-
-        <section class="config-section">
-            <div class="section-header">
-                <h2><i class="fas fa-cog"></i> Watermark Settings</h2>
-            </div>
-
-            <div class="config-grid">
-                <div class="config-card">
-                    <h3><i class="fas fa-stamp"></i> Watermark Image</h3>
-                    <div class="watermark-preview" id="watermark-preview">
-                        <img id="watermark-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='60' viewBox='0 0 200 60'%3E%3Crect width='200' height='60' fill='%235D5CDE' rx='8'/%3E%3Ctext x='100' y='35' text-anchor='middle' fill='white' font-family='Arial' font-size='16' font-weight='bold'%3EYour Logo%3C/text%3E%3C/svg%3E" alt="Watermark">
-                        <div class="watermark-overlay">
-                            <button class="btn btn-primary" onclick="document.getElementById('watermark-input').click()">
-                                <i class="fas fa-edit"></i> Change
-                            </button>
-                        </div>
-                    </div>
-                    <input type="file" id="watermark-input" accept=".png,.jpg,.jpeg" hidden>
-                </div>
-
-                <div class="config-card">
-                    <h3><i class="fas fa-crosshairs"></i> Position</h3>
-                    <div class="position-grid" id="position-grid">
-                        <button class="position-btn" data-position="top-left"><i class="fas fa-arrow-up"></i><i class="fas fa-arrow-left"></i></button>
-                        <button class="position-btn" data-position="top-center"><i class="fas fa-arrow-up"></i></button>
-                        <button class="position-btn" data-position="top-right"><i class="fas fa-arrow-up"></i><i class="fas fa-arrow-right"></i></button>
-                        <button class="position-btn" data-position="center-left"><i class="fas fa-arrow-left"></i></button>
-                        <button class="position-btn" data-position="center"><i class="fas fa-crosshairs"></i></button>
-                        <button class="position-btn" data-position="center-right"><i class="fas fa-arrow-right"></i></button>
-                        <button class="position-btn" data-position="bottom-left"><i class="fas fa-arrow-down"></i><i class="fas fa-arrow-left"></i></button>
-                        <button class="position-btn" data-position="bottom-center"><i class="fas fa-arrow-down"></i></button>
-                        <button class="position-btn active" data-position="bottom-right"><i class="fas fa-arrow-down"></i><i class="fas fa-arrow-right"></i></button>
-                    </div>
-                </div>
-
-                <div class="config-card">
-                    <h3><i class="fas fa-adjust"></i> Appearance</h3>
-                    <div class="slider-group">
-                        <label for="opacity-slider">Opacity: <span id="opacity-value">70%</span></label>
-                        <input type="range" id="opacity-slider" min="10" max="100" value="70" class="slider">
-                    </div>
-                    <div class="slider-group">
-                        <label for="size-slider">Size: <span id="size-value">25%</span></label>
-                        <input type="range" id="size-slider" min="5" max="50" value="25" class="slider">
-                    </div>
-                    <div class="slider-group">
-                        <label for="margin-slider">Margin: <span id="margin-value">20px</span></label>
-                        <input type="range" id="margin-slider" min="5" max="50" value="20" class="slider">
-                    </div>
-                </div>
-
-                <div class="config-card">
-                    <h3><i class="fas fa-file-export"></i> Output</h3>
-                    <div class="output-settings">
-                        <div class="setting-row">
-                            <label for="format-select">Format:</label>
-                            <select id="format-select" class="select-input">
-                                <option value="jpeg">JPEG</option>
-                                <option value="png">PNG</option>
-                                <option value="webp">WebP</option>
-                            </select>
-                        </div>
-                        <div class="setting-row">
-                            <label for="quality-slider">Quality: <span id="quality-value">90%</span></label>
-                            <input type="range" id="quality-slider" min="50" max="100" value="90" class="slider">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="preview-section">
-            <div class="section-header">
-                <h2><i class="fas fa-eye"></i> Live Preview</h2>
-                <div class="preview-controls">
-                    <button class="btn btn-outline" id="prev-image" disabled>
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <span id="image-counter">0 / 0</span>
-                    <button class="btn btn-outline" id="next-image" disabled>
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="preview-container">
-                <canvas id="preview-canvas"></canvas>
-                <div class="preview-placeholder" id="preview-placeholder">
-                    <i class="fas fa-image"></i>
-                    <p>Upload images to see preview</p>
-                </div>
-            </div>
-        </section>
-
-        <section class="process-section">
-            <div class="process-controls">
-                <button class="btn btn-primary btn-large" id="process-btn" disabled>
-                    <i class="fas fa-magic"></i> Process Images
+                <input type="file" id="watermark-upload" accept=".png,.jpg,.jpeg" hidden>
+                <button id="change-watermark" class="btn btn-secondary">
+                  <i class="fas fa-upload"></i>
+                  Change Watermark
                 </button>
+              </div>
             </div>
 
-            <div class="progress-container" id="progress-container" style="display: none;">
-                <div class="progress-header">
-                    <h3>Processing Images...</h3>
-                    <span id="progress-text">0 / 0</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill"></div>
-                </div>
+            <!-- Position Setting -->
+            <div class="setting-group">
+              <label class="setting-label" for="position-select">
+                <i class="fas fa-arrows-alt"></i>
+                Position
+              </label>
+              <div class="select-wrapper">
+                <select id="position-select" class="custom-select">
+                  <option value="top-left">Top Left</option>
+                  <option value="top-right">Top Right</option>
+                  <option value="center">Center</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="bottom-right" selected>Bottom Right</option>
+                </select>
+                <i class="fas fa-chevron-down select-icon"></i>
+              </div>
             </div>
 
-            <div class="results-container" id="results-container" style="display: none;">
-                <div class="results-header">
-                    <h3><i class="fas fa-check-circle"></i> Processing Complete!</h3>
-                    <button class="btn btn-success btn-large" id="download-btn">
-                        <i class="fas fa-download"></i> Download ZIP
-                    </button>
-                </div>
-                <div class="results-grid" id="results-grid"></div>
+            <!-- Opacity Setting -->
+            <div class="setting-group">
+              <label class="setting-label">
+                <i class="fas fa-adjust"></i>
+                Opacity
+                <span class="setting-value" id="opacity-value">70%</span>
+              </label>
+              <div class="slider-wrapper">
+                <input type="range" id="opacity-slider" class="custom-slider" min="10" max="100" value="70">
+                <div class="slider-track"></div>
+              </div>
             </div>
-        </section>
-    </main>
 
-    <footer class="footer">
-        <div class="footer-content">
-            <p>&copy; 2024 Watermark-It Pro. Built for real estate professionals.</p>
-            <div class="footer-links">
-                <a href="#"><i class="fab fa-github"></i></a>
-                <a href="#"><i class="fas fa-question-circle"></i></a>
+            <!-- Size Setting -->
+            <div class="setting-group">
+              <label class="setting-label">
+                <i class="fas fa-expand-arrows-alt"></i>
+                Size
+                <span class="setting-value" id="size-value">30%</span>
+              </label>
+              <div class="slider-wrapper">
+                <input type="range" id="size-slider" class="custom-slider" min="10" max="50" value="30">
+                <div class="slider-track"></div>
+              </div>
             </div>
+          </div>
         </div>
-    </footer>
+      </div>
 
-    <div class="loading-overlay" id="loading-overlay" style="display: none;">
-        <div class="loading-spinner">
-            <div class="spinner"></div>
-            <p>Processing...</p>
+      <!-- Right Panel -->
+      <div class="right-panel">
+        <!-- Preview Card -->
+        <div class="card preview-card">
+          <div class="card-header">
+            <h3>
+              <i class="fas fa-eye"></i>
+              Live Preview
+            </h3>
+            <div class="preview-controls">
+              <button class="preview-btn" id="zoom-out">
+                <i class="fas fa-search-minus"></i>
+              </button>
+              <button class="preview-btn" id="zoom-in">
+                <i class="fas fa-search-plus"></i>
+              </button>
+              <button class="preview-btn" id="reset-zoom">
+                <i class="fas fa-undo"></i>
+              </button>
+            </div>
+          </div>
+          
+          <div class="preview-container">
+            <div class="preview-wrapper">
+              <canvas id="preview-canvas"></canvas>
+              <div class="preview-placeholder" id="preview-placeholder">
+                <i class="fas fa-image"></i>
+                <h4>No Image Selected</h4>
+                <p>Upload images to see live preview</p>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- Process Card -->
+        <div class="card process-card">
+          <div class="card-header">
+            <h3>
+              <i class="fas fa-magic"></i>
+              Process Images
+            </h3>
+          </div>
+          
+          <div class="process-content">
+            <div class="process-info">
+              <div class="info-item">
+                <span class="info-label">Images:</span>
+                <span class="info-value" id="process-count">0</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Format:</span>
+                <span class="info-value">JPEG (90% quality)</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Output:</span>
+                <span class="info-value">ZIP Archive</span>
+              </div>
+            </div>
+            
+            <button id="process-btn" class="btn btn-primary btn-large" disabled>
+              <i class="fas fa-magic"></i>
+              <span class="btn-text">Process Images</span>
+              <div class="btn-loader" style="display: none;">
+                <i class="fas fa-spinner fa-spin"></i>
+              </div>
+            </button>
+            
+            <div id="download-section" class="download-section" style="display: none;">
+              <div class="download-success">
+                <i class="fas fa-check-circle"></i>
+                <span>Processing Complete!</span>
+              </div>
+              <a id="download-link" href="#" class="btn btn-success btn-large">
+                <i class="fas fa-download"></i>
+                Download Watermarked Images
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+  </main>
 
-    <script src="js/app.js"></script>
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <div class="footer-info">
+        <p>© 2025 Watermark-It. Written for FLR.</p>
+        <p>Open-source under the MIT license.</p>
+      </div>
+      <div class="footer-links">
+        <a href="#" class="footer-link">GitHub</a>
+        <a href="#" class="footer-link">Documentation</a>
+        <a href="#" class="footer-link">Support</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>How to Use Watermark-It</h3>
+        <button class="modal-close" id="close-help">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="help-steps">
+          <div class="help-step">
+            <div class="help-number">1</div>
+            <div class="help-content">
+              <h4>Upload Images</h4>
+              <p>Drag and drop your images or click to browse. Supports JPG, PNG, HEIC, and ZIP files.</p>
+            </div>
+          </div>
+          <div class="help-step">
+            <div class="help-number">2</div>
+            <div class="help-content">
+              <h4>Configure Watermark</h4>
+              <p>Upload your watermark image and adjust position, opacity, and size to your preference.</p>
+            </div>
+          </div>
+          <div class="help-step">
+            <div class="help-number">3</div>
+            <div class="help-content">
+              <h4>Preview & Process</h4>
+              <p>Use the live preview to see your changes, then process all images and download as ZIP.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="scripts/app.js"></script>
 </body>
 </html>
+  
