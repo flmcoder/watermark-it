@@ -687,6 +687,116 @@ body {
   font-weight: 600;
   margin-bottom: var(--space-2);
 }
+/* =========================================
+   PREVIEW ENHANCEMENTS
+   ========================================= */
+
+.preview-loading {
+  text-align: center;
+  color: var(--gray-400);
+}
+
+.preview-loading i {
+  font-size: var(--font-size-3xl);
+  margin-bottom: var(--space-4);
+  color: var(--primary-color);
+}
+
+.preview-loading h4 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.preview-info {
+  padding: var(--space-4);
+  background: var(--gray-50);
+  border-top: 1px solid var(--gray-200);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
+}
+
+.preview-file-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.preview-navigation {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.preview-nav-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--border-radius);
+  background: var(--white);
+  color: var(--gray-600);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+
+.preview-nav-btn:hover:not(:disabled) {
+  background: var(--gray-50);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.preview-nav-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.preview-counter {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--gray-600);
+  min-width: 60px;
+  text-align: center;
+}
+
+/* =========================================
+   PROCESS ENHANCEMENTS
+   ========================================= */
+
+.process-progress {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  background: var(--gray-50);
+  border-radius: var(--border-radius-lg);
+  display: none;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--gray-200);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--space-3);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.progress-text {
+  font-size: var(--font-size-sm);
+  color: var(--gray-600);
+  text-align: center;
+}
 
 /* =========================================
    PROCESS SECTION
