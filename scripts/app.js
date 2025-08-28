@@ -14,6 +14,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const sizeValue = document.getElementById("size-value");
   const previewCanvas = document.getElementById("preview-canvas");
   const previewPlaceholder = document.getElementById("preview-placeholder");
+  const previewLoading = document.getElementById("preview-loading");
+  const previewInfo = document.getElementById("preview-info");
+  const previewFileName = document.getElementById("preview-file-name");
+  const previewCounter = document.getElementById("preview-counter");
+  const previewNavigation = document.getElementById("preview-navigation");
+  const generatePreviewBtn = document.getElementById("generate-preview");
+  const prevImageBtn = document.getElementById("prev-image");
+  const nextImageBtn = document.getElementById("next-image");
   const processBtn = document.getElementById("process-btn");
   const downloadLink = document.getElementById("download-link");
   const downloadSection = document.getElementById("download-section");
@@ -26,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let watermarkImage = new Image();
   watermarkImage.src = watermarkPreview.src;
   const files = [];
+  let processedPreviews = [];
   let currentPreviewIndex = 0;
 
   // Initialize app
@@ -33,8 +42,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function init() {
     setupEventListeners();
+    setDefaultSettings();
     updateSliderValues();
     updateSteps();
+  }
+
+  // Set default settings
+  function setDefaultSettings() {
+    positionSelect.value = "center";
+    opacitySlider.value = "75";
+    sizeSlider.value = "30";
   }
 
   // Event Listeners
@@ -56,9 +73,11 @@ document.addEventListener("DOMContentLoaded", () => {
     // Controls
     sizeSlider.addEventListener("input", updateSliderValues);
     opacitySlider.addEventListener("input", updateSliderValues);
-    positionSelect.addEventListener("change", updatePreview);
-    sizeSlider.addEventListener("input", updatePreview);
-    opacitySlider.addEventListener("input", updatePreview);
+
+    // Preview
+    generatePreviewBtn.addEventListener("click", generatePreview);
+    prevImageBtn.addEventListener("click", () => navigatePreview(-1));
+    nextImageBtn.addEventListener("click", () => navigatePreview(1));
 
     // Process
     processBtn.addEventListener("click", processImages);
@@ -96,17 +115,56 @@ document.addEventListener("DOMContentLoaded", () => {
     handleFiles(e.dataTransfer.files);
   }
 
-  function handleFiles(selectedFiles) {
+  async function handleFiles(selectedFiles) {
     for (const file of selectedFiles) {
-      if (file.type.match("image.*") || file.name.endsWith(".heic")) {
+      if (file.name.endsWith('.zip')) {
+        // Handle ZIP files
+        try {
+          const zip = new JSZip();
+          const zipContent = await zip.loadAsync(file);
+          
+          for (const filename in zipContent.files) {
+            const zipFile = zipContent.files[filename];
+            if (!zipFile.dir && isImageFile(filename)) {
+              const blob = await zipFile.async('blob');
+              const imageFile = new File([blob], filename, { type: getImageMimeType(filename) });
+              files.push(imageFile);
+              addFileToList(imageFile);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing ZIP file:', error);
+          alert('Error processing ZIP file. Please ensure it contains valid images.');
+        }
+      } else if (file.type.match("image.*") || file.name.endsWith(".heic")) {
         files.push(file);
         addFileToList(file);
       }
     }
+    
     updateFileCount();
     updateProcessButton();
     updateSteps();
-    updatePreview();
+    resetPreview();
+  }
+
+  function isImageFile(filename) {
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic'];
+    return imageExtensions.some(ext => filename.toLowerCase().endsWith(ext));
+  }
+
+  function getImageMimeType(filename) {
+    const ext = filename.toLowerCase().split('.').pop();
+    const mimeTypes = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'bmp': 'image/bmp',
+      'webp': 'image/webp',
+      'heic': 'image/heic'
+    };
+    return mimeTypes[ext] || 'image/jpeg';
   }
 
   function addFileToList(file) {
@@ -151,8 +209,17 @@ document.addEventListener("DOMContentLoaded", () => {
       updateFileCount();
       updateProcessButton();
       updateSteps();
-      updatePreview();
+      resetPreview();
     }
+  }
+
+  function resetPreview() {
+    processedPreviews = [];
+    currentPreviewIndex = 0;
+    previewCanvas.style.display = 'none';
+    previewInfo.style.display = 'none';
+    previewPlaceholder.style.display = 'block';
+    generatePreviewBtn.innerHTML = '<i class="fas fa-play"></i> Generate Preview';
   }
 
   function formatFileSize(bytes) {
@@ -171,7 +238,7 @@ document.addEventListener("DOMContentLoaded", () => {
       reader.onload = () => {
         watermarkImage.src = reader.result;
         watermarkPreview.src = reader.result;
-        updatePreview();
+        resetPreview(); // Reset preview when watermark changes
       };
       reader.readAsDataURL(file);
     }
@@ -185,6 +252,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateProcessButton() {
     processBtn.disabled = files.length === 0;
+    generatePreviewBtn.disabled = files.length === 0;
   }
 
   function updateSliderValues() {
@@ -203,68 +271,155 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Preview functionality
-  function updatePreview() {
-    if (files.length === 0) {
-      previewCanvas.style.display = 'none';
-      previewPlaceholder.style.display = 'block';
-      return;
-    }
+  async function generatePreview() {
+    if (files.length === 0) return;
 
+    // Show loading state
+    generatePreviewBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    generatePreviewBtn.disabled = true;
     previewPlaceholder.style.display = 'none';
-    previewCanvas.style.display = 'block';
+    previewLoading.style.display = 'block';
 
-    const file = files[currentPreviewIndex];
-    const img = new Image();
-    
-    img.onload = () => {
-      const canvas = previewCanvas;
-      const ctx = canvas.getContext("2d");
+    try {
+      processedPreviews = [];
       
-      // Set canvas size
-      const maxWidth = 600;
-      const maxHeight = 400;
-      const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
+      // Process first few images for preview (limit to 5 for performance)
+      const previewFiles = files.slice(0, Math.min(files.length, 5));
       
-      canvas.width = img.width * ratio;
-      canvas.height = img.height * ratio;
-      
-      // Draw image
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      // Draw watermark
-      const watermarkWidth = (canvas.width * sizeSlider.value) / 100;
-      const watermarkHeight = (watermarkImage.height * watermarkWidth) / watermarkImage.width;
-      let x = 10, y = 10;
-
-      switch (positionSelect.value) {
-        case "top-right":
-          x = canvas.width - watermarkWidth - 10;
-          y = 10;
-          break;
-        case "center":
-          x = (canvas.width - watermarkWidth) / 2;
-          y = (canvas.height - watermarkHeight) / 2;
-          break;
-        case "bottom-left":
-          x = 10;
-          y = canvas.height - watermarkHeight - 10;
-          break;
-        case "bottom-right":
-          x = canvas.width - watermarkWidth - 10;
-          y = canvas.height - watermarkHeight - 10;
-          break;
+      for (let i = 0; i < previewFiles.length; i++) {
+        const previewData = await processImageForPreview(previewFiles[i]);
+        processedPreviews.push(previewData);
       }
 
-      ctx.globalAlpha = opacitySlider.value / 100;
-      ctx.drawImage(watermarkImage, x, y, watermarkWidth, watermarkHeight);
-      ctx.globalAlpha = 1;
-    };
+      currentPreviewIndex = 0;
+      showPreview();
 
+    } catch (error) {
+      console.error('Error generating preview:', error);
+      alert('Error generating preview. Please try again.');
+      previewPlaceholder.style.display = 'block';
+    } finally {
+      previewLoading.style.display = 'none';
+      generatePreviewBtn.innerHTML = '<i class="fas fa-sync"></i> Regenerate';
+      generatePreviewBtn.disabled = false;
+    }
+  }
+
+  function processImageForPreview(file) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size for preview (limit size for performance)
+        const maxWidth = 800;
+        const maxHeight = 600;
+        const ratio = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+        
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        
+        // Draw image
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // Draw watermark
+        drawWatermark(ctx, canvas.width, canvas.height);
+        
+        resolve({
+          canvas: canvas,
+          filename: file.name,
+          originalWidth: img.width,
+          originalHeight: img.height
+        });
+      };
+
+      loadImageFromFile(file, img);
+    });
+  }
+
+  function drawWatermark(ctx, canvasWidth, canvasHeight) {
+    const watermarkWidth = (canvasWidth * sizeSlider.value) / 100;
+    const watermarkHeight = (watermarkImage.height * watermarkWidth) / watermarkImage.width;
+    let x = 10, y = 10;
+
+    switch (positionSelect.value) {
+      case "top-left":
+        x = 10;
+        y = 10;
+        break;
+      case "top-right":
+        x = canvasWidth - watermarkWidth - 10;
+        y = 10;
+        break;
+      case "center":
+        x = (canvasWidth - watermarkWidth) / 2;
+        y = (canvasHeight - watermarkHeight) / 2;
+        break;
+      case "bottom-left":
+        x = 10;
+        y = canvasHeight - watermarkHeight - 10;
+        break;
+      case "bottom-right":
+        x = canvasWidth - watermarkWidth - 10;
+        y = canvasHeight - watermarkHeight - 10;
+        break;
+    }
+
+    ctx.globalAlpha = opacitySlider.value / 100;
+    ctx.drawImage(watermarkImage, x, y, watermarkWidth, watermarkHeight);
+    ctx.globalAlpha = 1;
+  }
+
+  function showPreview() {
+    if (processedPreviews.length === 0) return;
+
+    const preview = processedPreviews[currentPreviewIndex];
+    
+    // Update canvas
+    previewCanvas.width = preview.canvas.width;
+    previewCanvas.height = preview.canvas.height;
+    const ctx = previewCanvas.getContext('2d');
+    ctx.drawImage(preview.canvas, 0, 0);
+    
+    // Update UI
+    previewCanvas.style.display = 'block';
+    previewInfo.style.display = 'flex';
+    previewFileName.textContent = preview.filename;
+    previewCounter.textContent = `${currentPreviewIndex + 1} / ${processedPreviews.length}`;
+    
+    // Update navigation buttons
+    prevImageBtn.disabled = currentPreviewIndex === 0;
+    nextImageBtn.disabled = currentPreviewIndex === processedPreviews.length - 1;
+    
+    // Show/hide navigation if multiple images
+    if (processedPreviews.length > 1) {
+      previewNavigation.style.display = 'flex';
+    } else {
+      previewNavigation.style.display = 'none';
+    }
+  }
+
+  function navigatePreview(direction) {
+    const newIndex = currentPreviewIndex + direction;
+    if (newIndex >= 0 && newIndex < processedPreviews.length) {
+      currentPreviewIndex = newIndex;
+      showPreview();
+    }
+  }
+
+  function loadImageFromFile(file, img) {
     if (file.name.endsWith(".heic")) {
       if (typeof heic2any !== 'undefined') {
         heic2any({ blob: file }).then((converted) => {
           img.src = URL.createObjectURL(converted);
+        }).catch((error) => {
+          console.error('Error converting HEIC:', error);
+          img.src = URL.createObjectURL(file); // Fallback
         });
+      } else {
+        img.src = URL.createObjectURL(file);
       }
     } else {
       img.src = URL.createObjectURL(file);
@@ -285,17 +440,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const zip = new JSZip();
-      const processPromises = files.map((file, index) => 
-        processIndividualImage(file, index, zip)
-      );
-
-      await Promise.all(processPromises);
+      
+      // Process each file
+      for (let i = 0; i < files.length; i++) {
+        await processIndividualImage(files[i], i, zip);
+        
+        // Update progress (if you want to add a progress bar)
+        const progress = ((i + 1) / files.length) * 100;
+        console.log(`Processing: ${progress.toFixed(1)}%`);
+      }
 
       // Generate and download ZIP
-      const content = await zip.generateAsync({ type: "blob" });
+      console.log('Generating ZIP file...');
+      const content = await zip.generateAsync({ 
+        type: "blob",
+        compression: "DEFLATE",
+        compressionOptions: { level: 6 }
+      });
+      
       downloadLink.href = URL.createObjectURL(content);
-      downloadLink.download = "watermarked-images.zip";
+      downloadLink.download = `watermarked-images-${Date.now()}.zip`;
       downloadSection.style.display = 'block';
+
+      console.log('Processing complete!');
 
     } catch (error) {
       console.error('Error processing images:', error);
@@ -309,63 +476,46 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function processIndividualImage(file, index, zip) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        // Draw original image
-        ctx.drawImage(img, 0, 0);
-        
-        // Draw watermark
-        const watermarkWidth = (img.width * sizeSlider.value) / 100;
-        const watermarkHeight = (watermarkImage.height * watermarkWidth) / watermarkImage.width;
-        let x = 10, y = 10;
-
-        switch (positionSelect.value) {
-          case "top-right":
-            x = img.width - watermarkWidth - 10;
-            y = 10;
-            break;
-          case "center":
-            x = (img.width - watermarkWidth) / 2;
-            y = (img.height - watermarkHeight) / 2;
-            break;
-          case "bottom-left":
-            x = 10;
-            y = img.height - watermarkHeight - 10;
-            break;
-          case "bottom-right":
-            x = img.width - watermarkWidth - 10;
-            y = img.height - watermarkHeight - 10;
-            break;
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // Use original image dimensions
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          // Draw original image
+          ctx.drawImage(img, 0, 0);
+          
+          // Draw watermark
+          drawWatermark(ctx, canvas.width, canvas.height);
+          
+          // Convert to blob with 100% quality
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const originalName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+              const filename = `watermarked_${String(index + 1).padStart(3, '0')}_${originalName}.jpg`;
+              zip.file(filename, blob);
+              resolve();
+            } else {
+              reject(new Error('Failed to create blob'));
+            }
+          }, "image/jpeg", 1.0); // 100% quality
+          
+        } catch (error) {
+          reject(error);
         }
-
-        ctx.globalAlpha = opacitySlider.value / 100;
-        ctx.drawImage(watermarkImage, x, y, watermarkWidth, watermarkHeight);
-        ctx.globalAlpha = 1;
-        
-        canvas.toBlob((blob) => {
-          const filename = `watermarked-${index + 1}-${file.name}`;
-          zip.file(filename, blob);
-          resolve();
-        }, "image/jpeg", 0.9);
       };
 
-      if (file.name.endsWith(".heic")) {
-        if (typeof heic2any !== 'undefined') {
-          heic2any({ blob: file }).then((converted) => {
-            img.src = URL.createObjectURL(converted);
-          });
-        }
-      } else {
-        img.src = URL.createObjectURL(file);
-      }
+      img.onerror = () => {
+        reject(new Error(`Failed to load image: ${file.name}`));
+      };
+
+      loadImageFromFile(file, img);
     });
   }
 
@@ -401,3 +551,4 @@ document.addEventListener("DOMContentLoaded", () => {
     themeToggle.querySelector('i').className = 'fas fa-sun';
   }
 });
+      
