@@ -97,47 +97,31 @@ document.addEventListener("DOMContentLoaded", () => {
   let watermarkImage = new Image();
   watermarkImage.crossOrigin = "anonymous";
   
-  // Available watermarks from assets folder (GitHub deployment ready)
+  // Available watermarks - Updated to match your actual assets folder
   const availableWatermarks = [
     { 
-      name: "Fort Lowell Logo", 
-      path: "assets/fort-lowell-logo.png",
+      name: "Logo Watermark", 
+      path: "assets/logo-watermark.png",
       fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
     },
     { 
-      name: "Fort Lowell Banner", 
-      path: "assets/fort-lowell-banner.png",
+      name: "Logo Watermark 2", 
+      path: "assets/logo-watermark2.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+    },
+    { 
+      name: "Grey Watermark", 
+      path: "assets/grey-watermark.png",
       fallback: "https://pfst.cf2.poecdn.net/base/image/911f4cc97598a591680f81a4f8ae0e0ab9a94f433dc324b57d6915d144f19b94?w=3600&h=1024"
     },
     { 
-      name: "Fort Lowell Orange", 
-      path: "assets/fort-lowell-orange.png",
+      name: "Flat White Stroke", 
+      path: "assets/Flat-white-stroke-watermark.png",
       fallback: "https://pfst.cf2.poecdn.net/base/image/df10a509049e8085ede13109f49ec911f6b467169ff9eb6a9b6839be7cce0bca?w=3600&h=1024"
     },
-    // Additional watermarks - will auto-detect any .png files in assets folder
     { 
-      name: "Watermark 1", 
-      path: "assets/watermark-1.png",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
-    },
-    { 
-      name: "Watermark 2", 
-      path: "assets/watermark-2.png",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
-    },
-    { 
-      name: "Watermark 3", 
-      path: "assets/watermark-3.png",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
-    },
-    { 
-      name: "Watermark 4", 
-      path: "assets/watermark-4.png",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
-    },
-    { 
-      name: "Watermark 5", 
-      path: "assets/watermark-5.png",
+      name: "Default Watermark", 
+      path: "assets/default",
       fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
     }
   ];
@@ -159,7 +143,6 @@ document.addEventListener("DOMContentLoaded", () => {
     setDefaultSettings();
     updateSliderValues();
     updateSteps();
-    detectAssetsFolder();
   }
 
   function setDefaultSettings() {
@@ -169,88 +152,29 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // -----------------------------------------------------------------
-  // Assets Folder Detection (GitHub deployment)
-  // -----------------------------------------------------------------
-  async function detectAssetsFolder() {
-    // This function will attempt to load additional .png files from the assets folder
-    // when deployed on GitHub. It gracefully fails in other environments.
-    const commonWatermarkNames = [
-      'logo', 'banner', 'watermark', 'brand', 'signature', 'stamp',
-      'mark', 'seal', 'badge', 'emblem', 'icon', 'symbol'
-    ];
-    
-    // Try to load additional watermarks with common naming patterns
-    for (let i = 1; i <= 20; i++) {
-      for (const baseName of commonWatermarkNames) {
-        const variations = [
-          `${baseName}-${i}.png`,
-          `${baseName}${i}.png`,
-          `${baseName}_${i}.png`,
-          `watermark-${baseName}-${i}.png`,
-          `flr-${baseName}-${i}.png`,
-          `fort-lowell-${baseName}-${i}.png`
-        ];
-        
-        for (const filename of variations) {
-          try {
-            const exists = await checkFileExists(`assets/${filename}`);
-            if (exists) {
-              availableWatermarksmarks.push({
-                name: `${baseName.charAt(0).toUpperCase() + baseName.slice(1)} ${i}`,
-                path: `assets/${filename}`,
-                fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
-              });
-            }
-          } catch (e) {
-            // Silently continue - file doesn't exist or can't be accessed
-          }
-        }
-      }
-    }
-    
-    // Reload gallery if new watermarks were found
-    if (availableWatermarks.length > 8) {
-      loadWatermarkGallery();
-    }
-  }
-
-  async function checkFileExists(url) {
-    try {
-      const response = await fetch(url, { method: 'HEAD' });
-      return response.ok;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // -----------------------------------------------------------------
   // Watermark Gallery
   // -----------------------------------------------------------------
   function loadWatermarkGallery() {
     watermarkGallery.innerHTML = '';
     
-    // Only show first 8 watermarks to avoid overcrowding
-    const displayWatermarks = availableWatermarks.slice(0, 8);
-    
-    displayWatermarks.forEach((watermark, index) => {
+    // Show all available watermarks
+    availableWatermarks.forEach((watermark, index) => {
       const galleryItem = document.createElement('div');
       galleryItem.className = `gallery-item glass-inner ${index === 0 ? 'selected' : ''}`;
       galleryItem.title = watermark.name;
       
       const img = document.createElement('img');
-      img.src = watermark.fallback; // Start with fallback
       img.alt = watermark.name;
       img.loading = 'lazy';
       
-      // Try to load from assets first
-      const testImg = new Image();
-      testImg.onload = () => {
-        img.src = watermark.path;
+      // Try to load from assets first, fallback to CDN
+      img.onerror = function() {
+        console.log(`Failed to load ${watermark.path}, using fallback`);
+        this.src = watermark.fallback;
+        this.onerror = null; // Prevent infinite loop
       };
-      testImg.onerror = () => {
-        // Keep fallback URL
-      };
-      testImg.src = watermark.path;
+      
+      img.src = watermark.path;
       
       galleryItem.appendChild(img);
       galleryItem.addEventListener('click', () => selectWatermark(index));
@@ -268,25 +192,29 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     
     selectedWatermarkIndex = index;
-    const watermark = availableWatermarksmarks[index];
+    const watermark = availableWatermarks[index];
     
     // Clear custom watermark selection
     watermarkPreview.style.display = 'none';
     watermarkPlaceholder.style.display = 'block';
     
-    // Try to load from assets first, fallback to CDN URL
+    // Load watermark image
     watermarkImage.onload = () => {
       watermarkPreview.src = watermarkImage.src;
       watermarkPreview.style.display = 'block';
       watermarkPlaceholder.style.display = 'none';
       resetPreview();
+      updateSteps(); // Update steps when watermark is loaded
+      console.log(`Watermark loaded: ${watermark.name}`);
     };
     
     watermarkImage.onerror = () => {
-      // Fallback to CDN URL
+      console.log(`Failed to load ${watermark.path}, trying fallback`);
+      // Try fallback URL
       watermarkImage.src = watermark.fallback;
     };
     
+    // Start with assets path
     watermarkImage.src = watermark.path;
   }
 
@@ -592,6 +520,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         
         resetPreview();
+        updateSteps();
       };
       reader.readAsDataURL(file);
     }
@@ -621,6 +550,9 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Enable/disable process button
     processBtn.disabled = !(hasFiles && hasWatermark);
+    
+    // Enable/disable preview button
+    generatePreviewBtn.disabled = !(hasFiles && hasWatermark);
   }
 
   function updateStep(stepElement, active) {
