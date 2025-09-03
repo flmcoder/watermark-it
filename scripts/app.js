@@ -97,8 +97,12 @@ document.addEventListener("DOMContentLoaded", () => {
   let watermarkImage = new Image();
   watermarkImage.crossOrigin = "anonymous";
   
-  // Fort Lowell Realty Professional Watermarks - Using your provided images
+  // Fort Lowell Realty Professional Watermarks - Updated with new default
   const availableWatermarks = [
+    { 
+      name: "Fort Lowell Premium Banner (Default)", 
+      url: "https://pfst.cf2.poecdn.net/base/image/d733ab95ffb19192be374da87a96c29964f994288f429ada054eb697315660ba?w=3600&h=1024"
+    },
     { 
       name: "Fort Lowell Orange Banner", 
       url: "https://pfst.cf2.poecdn.net/base/image/6d5c1c170575ce0a42988a32013449025819fe5c5d775f22ed0a42043e4d5768?w=3600&h=1024"
@@ -138,9 +142,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setDefaultSettings() {
-    positionSelect.value = "bottom-right";
+    positionSelect.value = "center";
     opacitySlider.value = "75";
-    sizeSlider.value = "30";
+    sizeSlider.value = "50";
   }
 
   // -----------------------------------------------------------------
@@ -165,7 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
       watermarkGallery.appendChild(galleryItem);
     });
     
-    // Set default watermark (first one)
+    // Set default watermark (first one - the new premium banner)
     selectWatermark(0);
   }
 
