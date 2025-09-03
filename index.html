@@ -11,7 +11,7 @@
   <meta property="og:title" content="Watermark-It - Professional Property Image Watermarking">
   <meta property="og:description" content="Brand your real estate images with Fort Lowell Realty watermarks. Professional batch processing with live preview.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=1200&h=630">
+  <meta property="og:image" content="https://pfst.cf2.poecdn.net/base/image/6d5c1c170575ce0a42988a32013449025819fe5c5d775f22ed0a42043e4d5768?w=1200&h=630">
   
   <!-- Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -100,7 +100,7 @@
       </div>
       <div class="step glass-effect" data-step="2">
         <div class="step-number">2</div>
-        <span>Configure Watermark</span>
+        <span>Select Watermark</span>
       </div>
       <div class="step glass-effect" data-step="3">
         <div class="step-number">3</div>
@@ -117,7 +117,7 @@
           <div class="card-header">
             <h3>
               <i class="fas fa-cloud-upload-alt"></i>
-              Upload Images
+              Upload Property Images
             </h3>
             <div class="file-counter">
               <span id="file-count">0</span> files selected
@@ -144,7 +144,7 @@
                   <div class="drop-icon">
                     <i class="fas fa-cloud-upload-alt"></i>
                   </div>
-                  <h4>Drag & Drop Images Here</h4>
+                  <h4>Drag & Drop Property Images Here</h4>
                   <p>or click to browse files</p>
                   <div class="file-types">
                     <span class="file-type">JPG</span>
@@ -160,7 +160,7 @@
             <!-- URL Upload -->
             <div id="url-upload" class="upload-section" style="display: none;">
               <div class="url-input-container glass-inner">
-                <input type="url" id="image-url-input" placeholder="Enter image URL (JPG, PNG, WebP)" class="url-input">
+                <input type="url" id="image-url-input" placeholder="Enter property image URL (JPG, PNG, WebP)" class="url-input">
                 <button id="add-url-btn" class="btn btn-primary">
                   <i class="fas fa-plus"></i>
                   Add URL
@@ -177,48 +177,75 @@
         <div class="card glass-effect settings-card">
           <div class="card-header">
             <h3>
-              <i class="fas fa-cog"></i>
-              Watermark Settings
+              <i class="fas fa-shield-alt"></i>
+              Fort Lowell Realty Watermarks
             </h3>
           </div>
           
           <div class="settings-content">
-            <!-- Watermark Gallery -->
+            <!-- Professional Watermark Gallery -->
             <div class="setting-group">
               <label class="setting-label">
                 <span>
-                  <i class="fas fa-images"></i>
-                  Watermark Gallery
+                  <i class="fas fa-star"></i>
+                  Professional Watermarks
                 </span>
+                <span class="setting-badge">Select One</span>
               </label>
               <div class="watermark-gallery" id="watermark-gallery">
-                <!-- Gallery will be populated by JavaScript -->
+                <!-- Gallery will be populated by JavaScript with professional watermarks -->
               </div>
+              <p class="watermark-help-text">
+                <i class="fas fa-info-circle"></i>
+                Click any watermark above to select it for your property images.
+              </p>
             </div>
 
-            <!-- Custom Watermark Upload -->
+            <!-- Current Selection Preview -->
             <div class="setting-group">
               <label class="setting-label">
                 <span>
-                  <i class="fas fa-upload"></i>
-                  Custom Watermark
+                  <i class="fas fa-eye"></i>
+                  Current Selection
                 </span>
               </label>
               <div class="watermark-upload-section">
                 <div class="watermark-preview-container glass-inner" id="watermark-preview-container">
-                  <img id="watermark-preview" src="" alt="Watermark Preview" style="display: none;">
+                  <img id="watermark-preview" src="" alt="Selected Watermark" style="display: none;">
                   <div class="watermark-placeholder" id="watermark-placeholder">
                     <i class="fas fa-image"></i>
-                    <span>Select from gallery or upload custom watermark</span>
-                  </div>
-                  <div class="watermark-overlay">
-                    <i class="fas fa-edit"></i>
+                    <span>Select a professional watermark above</span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Advanced Options Toggle -->
+            <div class="setting-group">
+              <button class="btn btn-secondary glass-btn w-full" id="advanced-toggle">
+                <i class="fas fa-chevron-down"></i>
+                Show Advanced Options
+              </button>
+            </div>
+
+            <!-- Advanced Watermark Section (Hidden by default) -->
+            <div id="advanced-watermark-section" style="display: none;">
+              <div class="setting-group">
+                <label class="setting-label">
+                  <span>
+                    <i class="fas fa-upload"></i>
+                    Custom Watermark Upload
+                  </span>
+                  <span class="setting-badge warning">Advanced</span>
+                </label>
+                <div class="advanced-warning glass-inner">
+                  <i class="fas fa-exclamation-triangle"></i>
+                  <p><strong>Warning:</strong> Only upload custom watermarks if you have permission to use them for Fort Lowell Realty branded content. Uploaded files will replace the professional watermark selection above.</p>
+                </div>
                 <input type="file" id="watermark-upload" accept=".png,.jpg,.jpeg,.webp" hidden>
-                <button id="change-watermark" class="btn btn-secondary glass-btn">
+                <button id="change-watermark" class="btn btn-secondary glass-btn w-full">
                   <i class="fas fa-upload"></i>
-                  Upload Custom Watermark
+                  Upload Custom Watermark (Advanced)
                 </button>
               </div>
             </div>
@@ -228,7 +255,7 @@
               <label class="setting-label" for="position-select">
                 <span>
                   <i class="fas fa-arrows-alt"></i>
-                  Position
+                  Watermark Position
                 </span>
               </label>
               <div class="select-wrapper">
@@ -237,7 +264,7 @@
                   <option value="top-right">Top Right</option>
                   <option value="center">Center</option>
                   <option value="bottom-left">Bottom Left</option>
-                  <option value="bottom-right" selected>Bottom Right</option>
+                  <option value="bottom-right" selected>Bottom Right (Recommended)</option>
                 </select>
                 <i class="fas fa-chevron-down select-icon"></i>
               </div>
@@ -255,6 +282,11 @@
               <div class="slider-wrapper">
                 <input type="range" id="opacity-slider" class="custom-slider" min="10" max="100" value="75">
               </div>
+              <div class="slider-labels">
+                <span>Subtle</span>
+                <span>Balanced</span>
+                <span>Bold</span>
+              </div>
             </div>
 
             <!-- Size Setting -->
@@ -269,6 +301,11 @@
               <div class="slider-wrapper">
                 <input type="range" id="size-slider" class="custom-slider" min="10" max="50" value="30">
               </div>
+              <div class="slider-labels">
+                <span>Small</span>
+                <span>Medium</span>
+                <span>Large</span>
+              </div>
             </div>
           </div>
         </div>
@@ -281,7 +318,7 @@
           <div class="card-header">
             <h3>
               <i class="fas fa-eye"></i>
-              Preview
+              Live Preview
             </h3>
             <div class="preview-controls">
               <button class="btn btn-secondary glass-btn" id="generate-preview">
@@ -300,12 +337,12 @@
               <div class="preview-placeholder" id="preview-placeholder">
                 <i class="fas fa-image"></i>
                 <h4>No Preview Generated</h4>
-                <p>Upload images and click "Generate Preview" to see results</p>
+                <p>Upload property images and click "Generate Preview" to see your watermarked results</p>
               </div>
               <div class="preview-loading" id="preview-loading" style="display: none;">
                 <i class="fas fa-spinner fa-spin"></i>
                 <h4>Generating Preview...</h4>
-                <p>Processing your images with watermarks</p>
+                <p>Processing your property images with Fort Lowell Realty watermarks</p>
               </div>
             </div>
             
@@ -329,30 +366,34 @@
           <div class="card-header">
             <h3>
               <i class="fas fa-magic"></i>
-              Process Images
+              Process & Download
             </h3>
           </div>
           
           <div class="process-content">
             <div class="process-info glass-inner">
               <div class="info-item">
-                <span class="info-label">Images:</span>
+                <span class="info-label">Property Images:</span>
                 <span class="info-value" id="process-count">0</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Format:</span>
-                <span class="info-value">JPEG (90% quality)</span>
+                <span class="info-label">Output Format:</span>
+                <span class="info-value">JPEG (High Quality)</span>
               </div>
               <div class="info-item">
-                <span class="info-label">Output:</span>
+                <span class="info-label">Download Package:</span>
                 <span class="info-value">ZIP Archive</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Branding:</span>
+                <span class="info-value">Fort Lowell Realty</span>
               </div>
             </div>
             
             <button id="process-btn" class="btn btn-primary btn-large glass-btn" disabled>
               <span class="btn-text">
                 <i class="fas fa-magic"></i>
-                Process Images
+                Process Property Images
               </span>
               <div class="btn-loader" style="display: none;">
                 <i class="fas fa-spinner fa-spin"></i>
@@ -368,6 +409,10 @@
                 <i class="fas fa-download"></i>
                 Download Watermarked Images
               </a>
+              <p class="download-note">
+                <i class="fas fa-info-circle"></i>
+                Images are branded with Fort Lowell Realty watermarks and ready for marketing use.
+              </p>
             </div>
           </div>
         </div>
@@ -440,34 +485,44 @@
           <div class="help-step">
             <div class="help-number">1</div>
             <div class="help-content">
-              <h4>Upload Images</h4>
-              <p>Drag and drop your property images, upload files/ZIP archives, or add images via URL. Supports JPG, PNG, and WebP formats. <strong>Note:</strong> HEIC files may experience processing issues - convert to JPG for best results.</p>
+              <h4>Upload Property Images</h4>
+              <p>Drag and drop your property photos, upload files/ZIP archives, or add images via URL. Supports JPG, PNG, and WebP formats. <strong>Note:</strong> HEIC files may experience issues - convert to JPG for best results.</p>
             </div>
           </div>
           <div class="help-step">
             <div class="help-number">2</div>
             <div class="help-content">
-              <h4>Configure Watermark</h4>
-              <p>Choose from our professional Fort Lowell Realty watermark gallery or upload your own custom watermark. Adjust position, opacity, and size to perfectly brand your property images.</p>
+              <h4>Select Professional Watermark</h4>
+              <p>Choose from Fort Lowell Realty's professional watermark collection. Each watermark is pre-approved for marketing use. Adjust position, opacity, and size as needed.</p>
             </div>
           </div>
           <div class="help-step">
             <div class="help-number">3</div>
             <div class="help-content">
               <h4>Preview & Process</h4>
-              <p>Generate a live preview to see exactly how your watermarked images will look. Use the enlarge button for fullscreen preview with keyboard/swipe navigation. Process all images and download as a ZIP archive.</p>
+              <p>Generate a live preview to see exactly how your branded images will look. Use the enlarge button for fullscreen preview with navigation. Process all images and download as a ZIP archive.</p>
             </div>
           </div>
         </div>
         
         <div class="help-tips glass-inner" style="margin-top: 2rem; padding: 1.5rem; border-radius: 1rem;">
-          <h4 style="margin-bottom: 1rem; color: var(--primary);"><i class="fas fa-lightbulb"></i> Pro Tips</h4>
+          <h4 style="margin-bottom: 1rem; color: var(--primary);"><i class="fas fa-lightbulb"></i> Pro Tips for Property Photos</h4>
           <ul style="list-style: none; padding: 0; margin: 0;">
-            <li style="margin-bottom: 0.5rem;"><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> Use high-resolution images for best watermark quality</li>
-            <li style="margin-bottom: 0.5rem;"><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> Lower opacity for subtle branding, higher for protection</li>
-            <li style="margin-bottom: 0.5rem;"><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> Bottom-right position is ideal for property photos</li>
-            <li><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> Process multiple images at once for efficiency</li>
+            <li style="margin-bottom: 0.5rem;"><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> Use high-resolution photos for best watermark quality</li>
+            <li style="margin-bottom: 0.5rem;"><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> Bottom-right position works best for property photos</li>
+            <li style="margin-bottom: 0.5rem;"><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> 75% opacity provides good visibility without overpowering</li>
+            <li style="margin-bottom: 0.5rem;"><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> Process multiple photos at once for efficiency</li>
+            <li><i class="fas fa-check" style="color: var(--success); margin-right: 0.5rem;"></i> Download includes all images in one convenient ZIP file</li>
           </ul>
+        </div>
+
+        <div class="help-contact glass-inner" style="margin-top: 1.5rem; padding: 1.5rem; border-radius: 1rem; text-align: center;">
+          <h4 style="margin-bottom: 1rem; color: var(--primary);"><i class="fas fa-headset"></i> Need Help?</h4>
+          <p style="margin-bottom: 1rem;">Contact Fort Lowell Realty support for assistance with watermarking or technical issues.</p>
+          <a href="mailto:aaron@flraz.com" class="btn btn-primary glass-btn" style="display: inline-flex;">
+            <i class="fas fa-envelope"></i>
+            Contact Support
+          </a>
         </div>
       </div>
     </div>
