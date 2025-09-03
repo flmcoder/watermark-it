@@ -97,32 +97,23 @@ document.addEventListener("DOMContentLoaded", () => {
   let watermarkImage = new Image();
   watermarkImage.crossOrigin = "anonymous";
   
-  // Available watermarks - Updated to match your actual assets folder
+  // Fort Lowell Realty Professional Watermarks - Using your provided images
   const availableWatermarks = [
     { 
-      name: "Logo Watermark", 
-      path: "assets/logo-watermark.png",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+      name: "Fort Lowell Orange Banner", 
+      url: "https://pfst.cf2.poecdn.net/base/image/6d5c1c170575ce0a42988a32013449025819fe5c5d775f22ed0a42043e4d5768?w=3600&h=1024"
     },
     { 
-      name: "Logo Watermark 2", 
-      path: "assets/logo-watermark2.png",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+      name: "Fort Lowell Grey Banner", 
+      url: "https://pfst.cf2.poecdn.net/base/image/911f4cc97598a591680f81a4f8ae0e0ab9a94f433dc324b57d6915d144f19b94?w=3600&h=1024"
     },
     { 
-      name: "Grey Watermark", 
-      path: "assets/grey-watermark.png",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/911f4cc97598a591680f81a4f8ae0e0ab9a94f433dc324b57d6915d144f19b94?w=3600&h=1024"
+      name: "Fort Lowell Orange Banner Alt", 
+      url: "https://pfst.cf2.poecdn.net/base/image/df10a509049e8085ede13109f49ec911f6b467169ff9eb6a9b6839be7cce0bca?w=3600&h=1024"
     },
     { 
-      name: "Flat White Stroke", 
-      path: "assets/Flat-white-stroke-watermark.png",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/df10a509049e8085ede13109f49ec911f6b467169ff9eb6a9b6839be7cce0bca?w=3600&h=1024"
-    },
-    { 
-      name: "Default Watermark", 
-      path: "assets/default",
-      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+      name: "Fort Lowell Gold Banner", 
+      url: "https://pfst.cf2.poecdn.net/base/image/82176094812d5c1748ac45ac7353dba068754e350effc874dbbcdf415bfae8bc?w=935&h=266"
     }
   ];
   
@@ -131,6 +122,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentPreviewIndex = 0;
   let selectedWatermarkIndex = 0;
   let currentUploadMethod = 'files';
+  let isCustomWatermark = false;
 
   // -----------------------------------------------------------------
   // Initialize app
@@ -157,7 +149,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadWatermarkGallery() {
     watermarkGallery.innerHTML = '';
     
-    // Show all available watermarks
+    // Load all Fort Lowell watermarks
     availableWatermarks.forEach((watermark, index) => {
       const galleryItem = document.createElement('div');
       galleryItem.className = `gallery-item glass-inner ${index === 0 ? 'selected' : ''}`;
@@ -166,22 +158,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const img = document.createElement('img');
       img.alt = watermark.name;
       img.loading = 'lazy';
-      
-      // Try to load from assets first, fallback to CDN
-      img.onerror = function() {
-        console.log(`Failed to load ${watermark.path}, using fallback`);
-        this.src = watermark.fallback;
-        this.onerror = null; // Prevent infinite loop
-      };
-      
-      img.src = watermark.path;
+      img.src = watermark.url;
       
       galleryItem.appendChild(img);
       galleryItem.addEventListener('click', () => selectWatermark(index));
       watermarkGallery.appendChild(galleryItem);
     });
     
-    // Set default watermark
+    // Set default watermark (first one)
     selectWatermark(0);
   }
 
@@ -192,11 +176,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     
     selectedWatermarkIndex = index;
+    isCustomWatermark = false;
     const watermark = availableWatermarks[index];
-    
-    // Clear custom watermark selection
-    watermarkPreview.style.display = 'none';
-    watermarkPlaceholder.style.display = 'block';
     
     // Load watermark image
     watermarkImage.onload = () => {
@@ -204,18 +185,17 @@ document.addEventListener("DOMContentLoaded", () => {
       watermarkPreview.style.display = 'block';
       watermarkPlaceholder.style.display = 'none';
       resetPreview();
-      updateSteps(); // Update steps when watermark is loaded
-      console.log(`Watermark loaded: ${watermark.name}`);
+      updateSteps();
+      console.log(`Professional watermark loaded: ${watermark.name}`);
     };
     
     watermarkImage.onerror = () => {
-      console.log(`Failed to load ${watermark.path}, trying fallback`);
-      // Try fallback URL
-      watermarkImage.src = watermark.fallback;
+      console.error(`Failed to load watermark: ${watermark.name}`);
+      showCustomAlert(`Error loading watermark: ${watermark.name}`);
     };
     
-    // Start with assets path
-    watermarkImage.src = watermark.path;
+    // Load the watermark
+    watermarkImage.src = watermark.url;
   }
 
   // -----------------------------------------------------------------
@@ -241,12 +221,17 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    // Watermark
+    // Advanced watermark upload
     document.getElementById("change-watermark").addEventListener("click", () => {
       watermarkUpload.click();
     });
     watermarkUpload.addEventListener("change", handleWatermarkUpload);
-    watermarkPreviewContainer.addEventListener("click", () => watermarkUpload.click());
+    
+    // Advanced toggle
+    const advancedToggle = document.getElementById("advanced-toggle");
+    if (advancedToggle) {
+      advancedToggle.addEventListener("click", toggleAdvancedOptions);
+    }
 
     // Controls
     sizeSlider.addEventListener("input", updateSliderValues);
@@ -306,9 +291,9 @@ document.addEventListener("DOMContentLoaded", () => {
       
       if (Math.abs(diff) > swipeThreshold) {
         if (diff > 0) {
-          navigateFullscreen(1); // Swipe left - next image
+          navigateFullscreen(1);
         } else {
-          navigateFullscreen(-1); // Swipe right - previous image
+          navigateFullscreen(-1);
         }
       }
     }
@@ -320,6 +305,25 @@ document.addEventListener("DOMContentLoaded", () => {
       if (e.target === helpModal) hideModal(helpModal);
     });
     themeToggle.addEventListener("click", toggleTheme);
+  }
+
+  // -----------------------------------------------------------------
+  // Advanced Options Toggle
+  // -----------------------------------------------------------------
+  function toggleAdvancedOptions() {
+    const advancedSection = document.getElementById("advanced-watermark-section");
+    const advancedToggle = document.getElementById("advanced-toggle");
+    const toggleIcon = advancedToggle.querySelector("i");
+    
+    if (advancedSection.style.display === "none" || !advancedSection.style.display) {
+      advancedSection.style.display = "block";
+      toggleIcon.className = "fas fa-chevron-up";
+      advancedToggle.innerHTML = '<i class="fas fa-chevron-up"></i> Hide Advanced Options';
+    } else {
+      advancedSection.style.display = "none";
+      toggleIcon.className = "fas fa-chevron-down";
+      advancedToggle.innerHTML = '<i class="fas fa-chevron-down"></i> Show Advanced Options';
+    }
   }
 
   // -----------------------------------------------------------------
@@ -412,7 +416,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     
-    // Validate URL format
     try {
       new URL(url);
     } catch (e) {
@@ -420,7 +423,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     
-    // Check if it's likely an image URL
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
     const hasImageExtension = imageExtensions.some(ext => 
       url.toLowerCase().includes(ext)
@@ -431,7 +433,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     
-    // Add to files list
     files.push({ 
       url, 
       type: 'url', 
@@ -485,7 +486,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Global function for removing files (needed for onclick)
   window.removeFile = function(index) {
     files.splice(index, 1);
     updateFileList();
@@ -513,6 +513,7 @@ document.addEventListener("DOMContentLoaded", () => {
         watermarkPreview.src = reader.result;
         watermarkPreview.style.display = 'block';
         watermarkPlaceholder.style.display = 'none';
+        isCustomWatermark = true;
         
         // Clear gallery selection
         document.querySelectorAll('.gallery-item').forEach(item => {
@@ -542,16 +543,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Step 1: Upload Images
     updateStep(steps[0], true);
     
-    // Step 2: Configure Watermark  
-    updateStep(steps[1], hasFiles || hasWatermark);
+    // Step 2: Configure Watermark - Always active since we have defaults
+    updateStep(steps[1], true);
     
     // Step 3: Preview & Process
     updateStep(steps[2], hasFiles && hasWatermark);
     
-    // Enable/disable process button
+    // Enable/disable buttons
     processBtn.disabled = !(hasFiles && hasWatermark);
-    
-    // Enable/disable preview button
     generatePreviewBtn.disabled = !(hasFiles && hasWatermark);
   }
 
@@ -573,7 +572,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     if (!watermarkImage.complete || watermarkImage.naturalWidth === 0) {
-      showCustomAlert('Please select or upload a watermark image first.');
+      showCustomAlert('Watermark is not loaded. Please wait a moment and try again.');
       return;
     }
     
@@ -596,10 +595,8 @@ document.addEventListener("DOMContentLoaded", () => {
       let imageData;
       
       if (item.type === 'url') {
-        // Load image from URL
         imageData = await loadImageFromUrl(item.url);
       } else {
-        // Load image from file
         imageData = await loadImageFromFile(item.file);
       }
       
@@ -614,7 +611,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Draw original image
         ctx.drawImage(img, 0, 0);
         
-        // Add watermark if available
+        // Add watermark
         if (watermarkImage.complete && watermarkImage.naturalWidth > 0) {
           const watermarkSize = parseFloat(sizeSlider.value) / 100;
           const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
@@ -712,7 +709,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const preview = processedPreviews[currentPreviewIndex];
     const ctx = previewCanvas.getContext('2d');
     
-    // Set canvas size to fit container while maintaining aspect ratio
     const container = previewCanvas.parentElement;
     const maxWidth = container.clientWidth - 40;
     const maxHeight = 400;
@@ -770,7 +766,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const preview = processedPreviews[currentPreviewIndex];
     const ctx = fullscreenCanvas.getContext('2d');
     
-    // Set canvas size to fit screen while maintaining aspect ratio
     const maxWidth = window.innerWidth * 0.9;
     const maxHeight = window.innerHeight * 0.9;
     const ratio = Math.min(maxWidth / preview.canvas.width, maxHeight / preview.canvas.height);
@@ -792,7 +787,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (newIndex >= 0 && newIndex < processedPreviews.length) {
       currentPreviewIndex = newIndex;
       displayFullscreenImage();
-      displayPreviewImage(); // Update small preview too
+      displayPreviewImage();
     }
   }
 
@@ -806,7 +801,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     if (!watermarkImage.complete || watermarkImage.naturalWidth === 0) {
-      showCustomAlert('Please select or upload a watermark image first.');
+      showCustomAlert('Watermark is not loaded. Please wait a moment and try again.');
       return;
     }
     
@@ -869,7 +864,6 @@ document.addEventListener("DOMContentLoaded", () => {
         processedCount++;
       } catch (error) {
         console.error('Error processing image:', item.name, error);
-        showCustomAlert(`Error processing image: ${item.name}`);
       }
     }
     
@@ -895,7 +889,6 @@ document.addEventListener("DOMContentLoaded", () => {
       processBtn.disabled = false;
       downloadSection.style.display = 'block';
       
-      // Auto-scroll to download section
       downloadSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   }
@@ -922,7 +915,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // -----------------------------------------------------------------
-  // Custom Alert (replaces alert())
+  // Custom Alert
   // -----------------------------------------------------------------
   function showCustomAlert(message) {
     const alertModal = document.createElement('div');
@@ -947,7 +940,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.appendChild(alertModal);
     document.body.style.overflow = 'hidden';
     
-    // Auto-remove after click outside
     alertModal.addEventListener('click', (e) => {
       if (e.target === alertModal) {
         alertModal.remove();
@@ -955,7 +947,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
     
-    // Auto-remove after 10 seconds
     setTimeout(() => {
       if (alertModal.parentNode) {
         alertModal.remove();
