@@ -1890,3 +1890,118 @@ body::before {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary-dark);
 }
+/* =========================================
+   ENHANCED UI ELEMENTS
+   ========================================= */
+
+.setting-badge {
+  background: var(--bg-gradient-orange);
+  color: white;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.setting-badge.warning {
+  background: linear-gradient(135deg, var(--warning), #f59e0b);
+}
+
+.watermark-help-text {
+  margin-top: var(--space-lg);
+  padding: var(--space-lg);
+  background: var(--glass-inner);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  backdrop-filter: blur(10px);
+}
+
+.watermark-help-text i {
+  color: var(--primary);
+  margin-right: var(--space-sm);
+}
+
+.advanced-warning {
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(10px);
+  border-left: 4px solid var(--warning);
+}
+
+.advanced-warning i {
+  color: var(--warning);
+  margin-right: var(--space-sm);
+  font-size: var(--font-size-lg);
+  float: left;
+  margin-top: var(--space-xs);
+}
+
+.advanced-warning p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.download-note {
+  margin-top: var(--space-lg);
+  padding: var(--space-lg);
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: var(--radius-lg);
+  color: var(--success);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  font-weight: 500;
+}
+
+.download-note i {
+  margin-right: var(--space-sm);
+}
+
+.help-contact {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.w-full {
+  width: 100%;
+}
+
+/* Advanced section animation */
+#advanced-watermark-section {
+  transition: all 0.3s ease-in-out;
+  overflow: hidden;
+}
+
+/* Enhanced gallery selection */
+.gallery-item.selected::after {
+  content: '✓';
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  width: 24px;
+  height: 24px;
+  background: var(--success);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
