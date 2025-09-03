@@ -1,5 +1,19 @@
+// Dark mode detection
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.classList.add('dark');
+}
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+    if (event.matches) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+});
+
 document.addEventListener("DOMContentLoaded", () => {
+  // -----------------------------------------------------------------
   // DOM Elements
+  // -----------------------------------------------------------------
   const fileInput = document.getElementById("file-input");
   const dropZone = document.getElementById("drop-zone");
   const fileList = document.getElementById("file-list");
@@ -30,31 +44,31 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeHelp = document.getElementById("close-help");
   const themeToggle = document.getElementById("theme-toggle");
 
+  // -----------------------------------------------------------------
   // App State
+  // -----------------------------------------------------------------
   let watermarkImage = new Image();
-  watermarkImage.src = watermarkPreview.src;
+  watermarkImage.crossOrigin = "anonymous";
+  watermarkImage.src = "https://pfst.cf2.poecdn.net/base/image/d733ab95ffb19192be374da87a96c29964f994288f429ada054eb697315660ba?w=3600&h=1024";
+  
   const files = [];
   let processedPreviews = [];
   let currentPreviewIndex = 0;
 
+  // -----------------------------------------------------------------
   // Initialize app
+  // -----------------------------------------------------------------
   init();
 
   function init() {
     setupEventListeners();
-    setDefaultSettings();
     updateSliderValues();
     updateSteps();
   }
 
-  // Set default settings
-  function setDefaultSettings() {
-    positionSelect.value = "center";
-    opacitySlider.value = "75";
-    sizeSlider.value = "30";
-  }
-
+  // -----------------------------------------------------------------
   // Event Listeners
+  // -----------------------------------------------------------------
   function setupEventListeners() {
     // File upload
     dropZone.addEventListener("dragover", handleDragOver);
@@ -74,35 +88,377 @@ document.addEventListener("DOMContentLoaded", () => {
     sizeSlider.addEventListener("input", updateSliderValues);
     opacitySlider.addEventListener("input", updateSliderValues);
 
-    // Preview
+    // Preview & processing
     generatePreviewBtn.addEventListener("click", generatePreview);
     prevImageBtn.addEventListener("click", () => navigatePreview(-1));
     nextImageBtn.addEventListener("click", () => navigatePreview(1));
-
-    // Process
     processBtn.addEventListener("click", processImages);
 
-    // Modal
+    // Modal & theme
     helpBtn.addEventListener("click", () => showModal(helpModal));
     closeHelp.addEventListener("click", () => hideModal(helpModal));
     helpModal.addEventListener("click", (e) => {
       if (e.target === helpModal) hideModal(helpModal);
     });
-
-    // Theme toggle
     themeToggle.addEventListener("click", toggleTheme);
-
-    // Escape key to close modal
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") hideModal(helpModal);
     });
   }
 
+  // -----------------------------------------------------------------
   // File handling
-  function handleDragOver(e) {
-    e.preventDefault();
-    dropZone.classList.add("hover");
+  // -----------------------------------------------------------------
+  function handleDragOver(e) { 
+    e.preventDefault(); 
+    dropZone.classList.add("hover"); 
   }
+  
+  function handleDragLeave(e) { 
+    e.preventDefault(); 
+    dropZone.classList.remove("hover"); 
+  }
+  
+  function handleDrop(e) {
+    e.preventDefault();
+    dropZone.classList.remove("hover");
+    handleFiles(e.dataTransfer.files);
+  }
+
+  function handleFiles(fileList) {
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    
+    Array.from(fileList).forEach(file => {
+      if (validTypes.includes(file.type)) {
+        files.push(file);
+      }
+    });
+    
+    updateFileList();
+    updateSteps();
+  }
+
+  function updateFileList() {
+    fileCount.textContent = files.length;
+    processCount.textContent = files.length;
+    
+    fileList.innerHTML = '';
+    
+    files.forEach((file, index) => {
+      const fileItem = document.createElement('div');
+      fileItem.className = 'flex items-center gap-3 p-3 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-600';
+      fileItem.innerHTML = `
+        <div class="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white text-sm">
+          <i class="fas fa-image"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-gray-800 dark:text-white text-sm truncate">${file.name}</div>
+          <div class="text-gray-500 dark:text-gray-400 text-xs">${formatFileSize(file.size)}</div>
+        </div>
+        <button onclick="removeFile(${index})" class="text-red-500 hover:text-red-700 text-sm">
+          <i class="fas fa-times"></i>
+        </button>
+      `;
+      fileList.appendChild(fileItem);
+    });
+  }
+
+  // Global function for removing files (needed for onclick)
+  window.removeFile = function(index) {
+    files.splice(index, 1);
+    updateFileList();
+    updateSteps();
+    resetPreview();
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // -----------------------------------------------------------------
+  // Watermark handling
+  // -----------------------------------------------------------------
+  function handleWatermarkUpload(e) {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        watermarkImage.src = reader.result;
+        watermarkPreview.src = reader.result;
+        resetPreview();
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // UI Updates
+  // -----------------------------------------------------------------
+  function updateSliderValues() {
+    opacityValue.textContent = `${opacitySlider.value}%`;
+    sizeValue.textContent = `${sizeSlider.value}%`;
+  }
+
+  function updateSteps() {
+    const steps = document.querySelectorAll('[data-step]');
+    const hasFiles = files.length > 0;
+    
+    // Step 1: Upload Images
+    updateStep(steps[0], true);
+    
+    // Step 2: Configure Watermark
+    updateStep(steps[1], hasFiles);
+    
+    // Step 3: Preview & Process
+    updateStep(steps[2], hasFiles);
+    
+    // Enable/disable process button
+    processBtn.disabled = !hasFiles;
+  }
+
+  function updateStep(stepElement, active) {
+    const number = stepElement.querySelector('div');
+    if (active) {
+      stepElement.className = stepElement.className.replace('text-gray-400', 'text-purple-600');
+      number.className = number.className.replace('bg-gray-200 dark:bg-gray-700', 'bg-purple-600 text-white');
+    } else {
+      stepElement.className = stepElement.className.replace('text-purple-600', 'text-gray-400');
+      number.className = number.className.replace('bg-purple-600 text-white', 'bg-gray-200 dark:bg-gray-700');
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Preview functionality
+  // -----------------------------------------------------------------
+  function generatePreview() {
+    if (files.length === 0) return;
+    
+    showPreviewLoading();
+    processedPreviews = [];
+    currentPreviewIndex = 0;
+    
+    processPreviewsSequentially(0);
+  }
+
+  function processPreviewsSequentially(index) {
+    if (index >= files.length) {
+      showPreview();
+      return;
+    }
+    
+    const file = files[index];
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // Draw original image
+        ctx.drawImage(img, 0, 0);
+        
+        // Calculate watermark dimensions and position
+        const watermarkSize = parseFloat(sizeSlider.value) / 100;
+        const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
+        const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
+        
+        const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
+        
+        // Apply opacity and draw watermark
+        ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
+        ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
+        ctx.globalAlpha = 1;
+        
+        processedPreviews.push({
+          canvas: canvas,
+          filename: file.name
+        });
+        
+        processPreviewsSequentially(index + 1);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function getWatermarkPosition(imgWidth, imgHeight, wmWidth, wmHeight) {
+    const margin = 20;
+    const position = positionSelect.value;
+    
+    switch (position) {
+      case 'top-left':
+        return { x: margin, y: margin };
+      case 'top-right':
+        return { x: imgWidth - wmWidth - margin, y: margin };
+      case 'center':
+        return { x: (imgWidth - wmWidth) / 2, y: (imgHeight - wmHeight) / 2 };
+      case 'bottom-left':
+        return { x: margin, y: imgHeight - wmHeight - margin };
+      case 'bottom-right':
+      default:
+        return { x: imgWidth - wmWidth - margin, y: imgHeight - wmHeight - margin };
+    }
+  }
+
+  function showPreviewLoading() {
+    previewPlaceholder.style.display = 'none';
+    previewCanvas.style.display = 'none';
+    previewLoading.style.display = 'block';
+    previewInfo.style.display = 'none';
+  }
+
+  function showPreview() {
+    previewLoading.style.display = 'none';
+    previewPlaceholder.style.display = 'none';
+    previewCanvas.style.display = 'block';
+    previewInfo.style.display = 'flex';
+    
+    displayPreviewImage();
+  }
+
+  function displayPreviewImage() {
+    if (processedPreviews.length === 0) return;
+    
+    const preview = processedPreviews[currentPreviewIndex];
+    const ctx = previewCanvas.getContext('2d');
+    
+    // Set canvas size to fit container while maintaining aspect ratio
+    const maxWidth = previewCanvas.parentElement.clientWidth - 40;
+    const maxHeight = 360;
+    const ratio = Math.min(maxWidth / preview.canvas.width, maxHeight / preview.canvas.height);
+    
+    previewCanvas.width = preview.canvas.width * ratio;
+    previewCanvas.height = preview.canvas.height * ratio;
+    
+    ctx.drawImage(preview.canvas, 0, 0, previewCanvas.width, previewCanvas.height);
+    
+    previewFileName.textContent = preview.filename;
+    previewCounter.textContent = `${currentPreviewIndex + 1} / ${processedPreviews.length}`;
+    
+    prevImageBtn.disabled = currentPreviewIndex === 0;
+    nextImageBtn.disabled = currentPreviewIndex === processedPreviews.length - 1;
+  }
+
+  function navigatePreview(direction) {
+    const newIndex = currentPreviewIndex + direction;
+    if (newIndex >= 0 && newIndex < processedPreviews.length) {
+      currentPreviewIndex = newIndex;
+      displayPreviewImage();
+    }
+  }
+
+  function resetPreview() {
+    processedPreviews = [];
+    currentPreviewIndex = 0;
+    previewLoading.style.display = 'none';
+    previewCanvas.style.display = 'none';
+    previewInfo.style.display = 'none';
+    previewPlaceholder.style.display = 'block';
+  }
+
+  // -----------------------------------------------------------------
+  // Processing functionality
+  // -----------------------------------------------------------------
+  function processImages() {
+    if (files.length === 0) return;
+    
+    const btnText = processBtn.querySelector('.btn-text');
+    const btnLoader = processBtn.querySelector('.btn-loader');
+    
+    processBtn.disabled = true;
+    btnText.style.display = 'none';
+    btnLoader.style.display = 'flex';
+    
+    const zip = new JSZip();
+    let processedCount = 0;
+    
+    files.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          // Draw original image
+          ctx.drawImage(img, 0, 0);
+          
+          // Calculate watermark dimensions and position
+          const watermarkSize = parseFloat(sizeSlider.value) / 100;
+          const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
+          const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
+          
+          const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
+          
+          // Apply opacity and draw watermark
+          ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
+          ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
+          ctx.globalAlpha = 1;
+          
+          // Convert to blob and add to zip
+          canvas.toBlob((blob) => {
+            const fileName = file.name.replace(/\.[^/.]+$/, '') + '_watermarked.jpg';
+            zip.file(fileName, blob);
+            
+            processedCount++;
+            if (processedCount === files.length) {
+              finalizeDownload(zip, btnText, btnLoader);
+            }
+          }, 'image/jpeg', 0.9);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function finalizeDownload(zip, btnText, btnLoader) {
+    zip.generateAsync({ type: 'blob' }).then((content) => {
+      const url = URL.createObjectURL(content);
+      downloadLink.href = url;
+      downloadLink.download = 'watermarked_images.zip';
+      
+      btnText.style.display = 'flex';
+      btnLoader.style.display = 'none';
+      processBtn.disabled = false;
+      downloadSection.style.display = 'block';
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // Modal functionality
+  // -----------------------------------------------------------------
+  function showModal(modal) {
+    modal.classList.add('active');
+  }
+
+  function hideModal(modal) {
+    modal.classList.remove('active');
+  }
+
+  // -----------------------------------------------------------------
+  // Theme toggle
+  // -----------------------------------------------------------------
+  function toggleTheme() {
+    document.documentElement.classList.toggle('dark');
+    const icon = themeToggle.querySelector('i');
+    if (document.documentElement.classList.contains('dark')) {
+      icon.className = 'fas fa-sun';
+    } else {
+      icon.className = 'fas fa-moon';
+    }
+  }
+});
 
   function handleDragLeave(e) {
     e.preventDefault();
