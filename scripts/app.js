@@ -1,260 +1,1034 @@
+// =========================================
+// THEME & INITIALIZATION
+// =========================================
+
+function initializeTheme() {
+  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (isDark) {
+    document.body.classList.add('dark-mode');
+  }
+  
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+    if (event.matches) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+    updateThemeIcon();
+  });
+  
+  updateThemeIcon();
+}
+
+function updateThemeIcon() {
+  const themeToggle = document.getElementById('theme-toggle');
+  const icon = themeToggle.querySelector('i');
+  if (document.body.classList.contains('dark-mode')) {
+    icon.className = 'fas fa-sun';
+  } else {
+    icon.className = 'fas fa-moon';
+  }
+}
+
+// =========================================
+// MAIN APPLICATION
+// =========================================
+
 document.addEventListener("DOMContentLoaded", () => {
+  // Initialize theme
+  initializeTheme();
+
   // -----------------------------------------------------------------
   // DOM Elements
   // -----------------------------------------------------------------
   const fileInput = document.getElementById("file-input");
-  const dropZone = document.getElementById("upload-container");
+  const dropZone = document.getElementById("drop-zone");
   const fileList = document.getElementById("file-list");
+  const fileCount = document.getElementById("file-count");
+  const processCount = document.getElementById("process-count");
   const watermarkUpload = document.getElementById("watermark-upload");
   const watermarkPreview = document.getElementById("watermark-preview");
+  const watermarkPreviewContainer = document.getElementById("watermark-preview-container");
+  const watermarkPlaceholder = document.getElementById("watermark-placeholder");
+  const watermarkGallery = document.getElementById("watermark-gallery");
   const positionSelect = document.getElementById("position-select");
   const opacitySlider = document.getElementById("opacity-slider");
   const sizeSlider = document.getElementById("size-slider");
+  const opacityValue = document.getElementById("opacity-value");
+  const sizeValue = document.getElementById("size-value");
   const previewCanvas = document.getElementById("preview-canvas");
-  const prevImageBtn = document.getElementById("prev-btn");
-  const nextImageBtn = document.getElementById("next-btn");
+  const previewPlaceholder = document.getElementById("preview-placeholder");
+  const previewLoading = document.getElementById("preview-loading");
+  const previewInfo = document.getElementById("preview-info");
+  const previewFileName = document.getElementById("preview-file-name");
+  const previewCounter = document.getElementById("preview-counter");
+  const generatePreviewBtn = document.getElementById("generate-preview");
+  const enlargePreviewBtn = document.getElementById("enlarge-preview");
+  const prevImageBtn = document.getElementById("prev-image");
+  const nextImageBtn = document.getElementById("next-image");
   const processBtn = document.getElementById("process-btn");
   const downloadLink = document.getElementById("download-link");
   const downloadSection = document.getElementById("download-section");
+  const helpModal = document.getElementById("help-modal");
+  const helpBtn = document.getElementById("help-btn");
+  const closeHelp = document.getElementById("close-help");
+  const themeToggle = document.getElementById("theme-toggle");
+  
+  // Upload method elements
+  const filesTab = document.getElementById("files-tab");
+  const urlTab = document.getElementById("url-tab");
+  const filesUpload = document.getElementById("files-upload");
+  const urlUpload = document.getElementById("url-upload");
+  const imageUrlInput = document.getElementById("image-url-input");
+  const addUrlBtn = document.getElementById("add-url-btn");
+  
+  // Fullscreen modal elements
+  const fullscreenModal = document.getElementById("fullscreen-modal");
+  const fullscreenCanvas = document.getElementById("fullscreen-canvas");
+  const fullscreenClose = document.getElementById("fullscreen-close");
+  const fullscreenPrev = document.getElementById("fullscreen-prev");
+  const fullscreenNext = document.getElementById("fullscreen-next");
+  const fullscreenFilename = document.getElementById("fullscreen-filename");
+  const fullscreenCounter = document.getElementById("fullscreen-counter");
 
   // -----------------------------------------------------------------
   // App State
   // -----------------------------------------------------------------
-  let uploadedFiles = [];
-  let currentFileIndex = 0;
   let watermarkImage = new Image();
-  watermarkImage.src = "assets/logo-watermark.png"; // Default watermark
+  watermarkImage.crossOrigin = "anonymous";
+  
+  // Available watermarks from assets folder (GitHub deployment ready)
+  const availableWatermarks = [
+    { 
+      name: "Fort Lowell Logo", 
+      path: "assets/fort-lowell-logo.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+    },
+    { 
+      name: "Fort Lowell Banner", 
+      path: "assets/fort-lowell-banner.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/911f4cc97598a591680f81a4f8ae0e0ab9a94f433dc324b57d6915d144f19b94?w=3600&h=1024"
+    },
+    { 
+      name: "Fort Lowell Orange", 
+      path: "assets/fort-lowell-orange.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/df10a509049e8085ede13109f49ec911f6b467169ff9eb6a9b6839be7cce0bca?w=3600&h=1024"
+    },
+    // Additional watermarks - will auto-detect any .png files in assets folder
+    { 
+      name: "Watermark 1", 
+      path: "assets/watermark-1.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+    },
+    { 
+      name: "Watermark 2", 
+      path: "assets/watermark-2.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+    },
+    { 
+      name: "Watermark 3", 
+      path: "assets/watermark-3.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+    },
+    { 
+      name: "Watermark 4", 
+      path: "assets/watermark-4.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+    },
+    { 
+      name: "Watermark 5", 
+      path: "assets/watermark-5.png",
+      fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+    }
+  ];
+  
+  const files = [];
+  let processedPreviews = [];
+  let currentPreviewIndex = 0;
+  let selectedWatermarkIndex = 0;
+  let currentUploadMethod = 'files';
 
   // -----------------------------------------------------------------
-  // Dark Mode Detection and Toggling
+  // Initialize app
   // -----------------------------------------------------------------
-  const prefersDarkMode = window.matchMedia("(prefers-color-scheme: dark)");
-  if (prefersDarkMode.matches) {
-    document.documentElement.classList.add("dark");
+  init();
+
+  function init() {
+    setupEventListeners();
+    loadWatermarkGallery();
+    setDefaultSettings();
+    updateSliderValues();
+    updateSteps();
+    detectAssetsFolder();
   }
 
-  prefersDarkMode.addEventListener("change", (e) => {
-    document.documentElement.classList.toggle("dark", e.matches);
-  });
-
-  document.getElementById("theme-toggle").addEventListener("click", () => {
-    document.documentElement.classList.toggle("dark");
-  });
+  function setDefaultSettings() {
+    positionSelect.value = "bottom-right";
+    opacitySlider.value = "75";
+    sizeSlider.value = "30";
+  }
 
   // -----------------------------------------------------------------
-  // File Handling
+  // Assets Folder Detection (GitHub deployment)
   // -----------------------------------------------------------------
-  fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
-  dropZone.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    dropZone.classList.add("hover");
-  });
-  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("hover"));
-  dropZone.addEventListener("drop", (e) => {
+  async function detectAssetsFolder() {
+    // This function will attempt to load additional .png files from the assets folder
+    // when deployed on GitHub. It gracefully fails in other environments.
+    const commonWatermarkNames = [
+      'logo', 'banner', 'watermark', 'brand', 'signature', 'stamp',
+      'mark', 'seal', 'badge', 'emblem', 'icon', 'symbol'
+    ];
+    
+    // Try to load additional watermarks with common naming patterns
+    for (let i = 1; i <= 20; i++) {
+      for (const baseName of commonWatermarkNames) {
+        const variations = [
+          `${baseName}-${i}.png`,
+          `${baseName}${i}.png`,
+          `${baseName}_${i}.png`,
+          `watermark-${baseName}-${i}.png`,
+          `flr-${baseName}-${i}.png`,
+          `fort-lowell-${baseName}-${i}.png`
+        ];
+        
+        for (const filename of variations) {
+          try {
+            const exists = await checkFileExists(`assets/${filename}`);
+            if (exists) {
+              availableWatermarksmarks.push({
+                name: `${baseName.charAt(0).toUpperCase() + baseName.slice(1)} ${i}`,
+                path: `assets/${filename}`,
+                fallback: "https://pfst.cf2.poecdn.net/base/image/57c851c04753092259d83d0a1aa34e2fd889c7218b50a338e6100dbf21ae922c?w=733&h=982"
+              });
+            }
+          } catch (e) {
+            // Silently continue - file doesn't exist or can't be accessed
+          }
+        }
+      }
+    }
+    
+    // Reload gallery if new watermarks were found
+    if (availableWatermarks.length > 8) {
+      loadWatermarkGallery();
+    }
+  }
+
+  async function checkFileExists(url) {
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      return response.ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Watermark Gallery
+  // -----------------------------------------------------------------
+  function loadWatermarkGallery() {
+    watermarkGallery.innerHTML = '';
+    
+    // Only show first 8 watermarks to avoid overcrowding
+    const displayWatermarks = availableWatermarks.slice(0, 8);
+    
+    displayWatermarks.forEach((watermark, index) => {
+      const galleryItem = document.createElement('div');
+      galleryItem.className = `gallery-item glass-inner ${index === 0 ? 'selected' : ''}`;
+      galleryItem.title = watermark.name;
+      
+      const img = document.createElement('img');
+      img.src = watermark.fallback; // Start with fallback
+      img.alt = watermark.name;
+      img.loading = 'lazy';
+      
+      // Try to load from assets first
+      const testImg = new Image();
+      testImg.onload = () => {
+        img.src = watermark.path;
+      };
+      testImg.onerror = () => {
+        // Keep fallback URL
+      };
+      testImg.src = watermark.path;
+      
+      galleryItem.appendChild(img);
+      galleryItem.addEventListener('click', () => selectWatermark(index));
+      watermarkGallery.appendChild(galleryItem);
+    });
+    
+    // Set default watermark
+    selectWatermark(0);
+  }
+
+  function selectWatermark(index) {
+    // Update gallery selection
+    document.querySelectorAll('.gallery-item').forEach((item, i) => {
+      item.classList.toggle('selected', i === index);
+    });
+    
+    selectedWatermarkIndex = index;
+    const watermark = availableWatermarksmarks[index];
+    
+    // Clear custom watermark selection
+    watermarkPreview.style.display = 'none';
+    watermarkPlaceholder.style.display = 'block';
+    
+    // Try to load from assets first, fallback to CDN URL
+    watermarkImage.onload = () => {
+      watermarkPreview.src = watermarkImage.src;
+      watermarkPreview.style.display = 'block';
+      watermarkPlaceholder.style.display = 'none';
+      resetPreview();
+    };
+    
+    watermarkImage.onerror = () => {
+      // Fallback to CDN URL
+      watermarkImage.src = watermark.fallback;
+    };
+    
+    watermarkImage.src = watermark.path;
+  }
+
+  // -----------------------------------------------------------------
+  // Event Listeners
+  // -----------------------------------------------------------------
+  function setupEventListeners() {
+    // Upload method tabs
+    filesTab.addEventListener('click', () => switchUploadMethod('files'));
+    urlTab.addEventListener('click', () => switchUploadMethod('url'));
+    
+    // File upload
+    dropZone.addEventListener("dragover", handleDragOver);
+    dropZone.addEventListener("dragleave", handleDragLeave);
+    dropZone.addEventListener("drop", handleDrop);
+    dropZone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+    
+    // URL upload
+    addUrlBtn.addEventListener('click', handleUrlAdd);
+    imageUrlInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        handleUrlAdd();
+      }
+    });
+
+    // Watermark
+    document.getElementById("change-watermark").addEventListener("click", () => {
+      watermarkUpload.click();
+    });
+    watermarkUpload.addEventListener("change", handleWatermarkUpload);
+    watermarkPreviewContainer.addEventListener("click", () => watermarkUpload.click());
+
+    // Controls
+    sizeSlider.addEventListener("input", updateSliderValues);
+    opacitySlider.addEventListener("input", updateSliderValues);
+    positionSelect.addEventListener("change", resetPreview);
+
+    // Preview & processing
+    generatePreviewBtn.addEventListener("click", generatePreview);
+    enlargePreviewBtn.addEventListener("click", openFullscreenPreview);
+    prevImageBtn.addEventListener("click", () => navigatePreview(-1));
+    nextImageBtn.addEventListener("click", () => navigatePreview(1));
+    processBtn.addEventListener("click", processImages);
+
+    // Fullscreen modal
+    fullscreenClose.addEventListener("click", closeFullscreenPreview);
+    fullscreenPrev.addEventListener("click", () => navigateFullscreen(-1));
+    fullscreenNext.addEventListener("click", () => navigateFullscreen(1));
+    fullscreenModal.addEventListener("click", (e) => {
+      if (e.target === fullscreenModal) closeFullscreenPreview();
+    });
+
+    // Keyboard navigation
+    document.addEventListener("keydown", (e) => {
+      if (fullscreenModal.classList.contains('active')) {
+        switch(e.key) {
+          case 'Escape':
+            closeFullscreenPreview();
+            break;
+          case 'ArrowLeft':
+            navigateFullscreen(-1);
+            break;
+          case 'ArrowRight':
+            navigateFullscreen(1);
+            break;
+        }
+      } else if (e.key === "Escape") {
+        hideModal(helpModal);
+      }
+    });
+
+    // Touch/swipe detection for fullscreen
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    fullscreenModal.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    });
+    
+    fullscreenModal.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      handleSwipe();
+    });
+    
+    function handleSwipe() {
+      const swipeThreshold = 50;
+      const diff = touchStartX - touchEndX;
+      
+      if (Math.abs(diff) > swipeThreshold) {
+        if (diff > 0) {
+          navigateFullscreen(1); // Swipe left - next image
+        } else {
+          navigateFullscreen(-1); // Swipe right - previous image
+        }
+      }
+    }
+
+    // Modal & theme
+    helpBtn.addEventListener("click", () => showModal(helpModal));
+    closeHelp.addEventListener("click", () => hideModal(helpModal));
+    helpModal.addEventListener("click", (e) => {
+      if (e.target === helpModal) hideModal(helpModal);
+    });
+    themeToggle.addEventListener("click", toggleTheme);
+  }
+
+  // -----------------------------------------------------------------
+  // Upload Method Switching
+  // -----------------------------------------------------------------
+  function switchUploadMethod(method) {
+    currentUploadMethod = method;
+    
+    // Update tab appearance
+    document.querySelectorAll('.upload-method-btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    
+    if (method === 'files') {
+      filesTab.classList.add('active');
+      filesUpload.style.display = 'block';
+      urlUpload.style.display = 'none';
+    } else {
+      urlTab.classList.add('active');
+      filesUpload.style.display = 'none';
+      urlUpload.style.display = 'block';
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // File handling
+  // -----------------------------------------------------------------
+  function handleDragOver(e) { 
+    e.preventDefault(); 
+    dropZone.classList.add("hover"); 
+  }
+  
+  function handleDragLeave(e) { 
+    e.preventDefault(); 
+    dropZone.classList.remove("hover"); 
+  }
+  
+  function handleDrop(e) {
     e.preventDefault();
     dropZone.classList.remove("hover");
     handleFiles(e.dataTransfer.files);
-  });
+  }
 
-  async function handleFiles(selectedFiles) {
-    for (const file of selectedFiles) {
-      if (file.name.endsWith(".zip")) {
-        await handleZipFile(file);
-      } else if (file.type.startsWith("image/") || file.name.endsWith(".heic")) {
-        uploadedFiles.push(file);
+  function handleFiles(fileList) {
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const zipTypes = ['application/zip', 'application/x-zip-compressed'];
+    
+    Array.from(fileList).forEach(file => {
+      if (validTypes.includes(file.type)) {
+        files.push({ file, type: 'file', name: file.name });
+      } else if (zipTypes.includes(file.type)) {
+        handleZipFile(file);
+      } else if (file.type === 'image/heic') {
+        showCustomAlert('HEIC files are currently experiencing compatibility issues. Please convert to JPG, PNG, or WebP format for best results.');
       }
-    }
+    });
+    
     updateFileList();
-    updatePreview();
+    updateSteps();
   }
 
-  async function handleZipFile(file) {
-    const zip = new JSZip();
-    const zipContent = await zip.loadAsync(file);
-    for (const filename in zipContent.files) {
-      const zipFile = zipContent.files[filename];
-      if (!zipFile.dir && isImageFile(filename)) {
-        const blob = await zipFile.async("blob");
-        const imageFile = new File([blob], filename, { type: getImageMimeType(filename) });
-        uploadedFiles.push(imageFile);
+  async function handleZipFile(zipFile) {
+    try {
+      const zip = new JSZip();
+      const zipContent = await zip.loadAsync(zipFile);
+      const validTypes = ['jpg', 'jpeg', 'png', 'webp'];
+      
+      for (const [filename, file] of Object.entries(zipContent.files)) {
+        if (!file.dir) {
+          const extension = filename.split('.').pop().toLowerCase();
+          if (validTypes.includes(extension)) {
+            const blob = await file.async('blob');
+            const fileObj = new File([blob], filename, { type: `image/${extension}` });
+            files.push({ file: fileObj, type: 'zip', name: filename, zipName: zipFile.name });
+          }
+        }
       }
+      
+      updateFileList();
+      updateSteps();
+    } catch (error) {
+      showCustomAlert('Error processing ZIP file. Please ensure it contains valid image files.');
     }
   }
 
-  function isImageFile(filename) {
-    const validExtensions = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".heic"];
-    return validExtensions.some((ext) => filename.toLowerCase().endsWith(ext));
-  }
-
-  function getImageMimeType(filename) {
-    const ext = filename.split(".").pop().toLowerCase();
-    const mimeTypes = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      bmp: "image/bmp",
-      webp: "image/webp",
-      heic: "image/heic",
-    };
-    return mimeTypes[ext] || "application/octet-stream";
+  function handleUrlAdd() {
+    const url = imageUrlInput.value.trim();
+    if (!url) {
+      showCustomAlert('Please enter a valid image URL.');
+      return;
+    }
+    
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch (e) {
+      showCustomAlert('Please enter a valid URL.');
+      return;
+    }
+    
+    // Check if it's likely an image URL
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    const hasImageExtension = imageExtensions.some(ext => 
+      url.toLowerCase().includes(ext)
+    );
+    
+    if (!hasImageExtension) {
+      showCustomAlert('URL should point to an image file (JPG, PNG, WebP).');
+      return;
+    }
+    
+    // Add to files list
+    files.push({ 
+      url, 
+      type: 'url', 
+      name: url.split('/').pop() || 'image-from-url.jpg' 
+    });
+    
+    imageUrlInput.value = '';
+    updateFileList();
+    updateSteps();
   }
 
   function updateFileList() {
-    fileList.innerHTML = uploadedFiles
-      .map(
-        (file, index) => `
-      <div class="file-item">
-        <span>${file.name}</span>
-        <button class="remove-btn" data-index="${index}">Remove</button>
-      </div>
-    `
-      )
-      .join("");
+    fileCount.textContent = files.length;
+    processCount.textContent = files.length;
+    
+    fileList.innerHTML = '';
+    
+    files.forEach((item, index) => {
+      const fileItem = document.createElement('div');
+      fileItem.className = 'file-item glass-inner fade-in';
+      
+      let iconClass = 'fas fa-image';
+      let sourceLabel = '';
+      let sizeInfo = '';
+      
+      if (item.type === 'file') {
+        sizeInfo = formatFileSize(item.file.size);
+      } else if (item.type === 'zip') {
+        iconClass = 'fas fa-file-archive';
+        sourceLabel = `from ${item.zipName}`;
+        sizeInfo = formatFileSize(item.file.size);
+      } else if (item.type === 'url') {
+        iconClass = 'fas fa-link';
+        sourceLabel = 'from URL';
+        sizeInfo = 'External';
+      }
+      
+      fileItem.innerHTML = `
+        <div class="file-icon">
+          <i class="${iconClass}"></i>
+        </div>
+        <div class="file-info">
+          <div class="file-name">${item.name}</div>
+          <div class="file-size">${sizeInfo} ${sourceLabel}</div>
+        </div>
+        <button onclick="removeFile(${index})" class="preview-btn glass-btn" title="Remove file" style="color: var(--error);">
+          <i class="fas fa-times"></i>
+        </button>
+      `;
+      fileList.appendChild(fileItem);
+    });
+  }
 
-    document.querySelectorAll(".remove-btn").forEach((btn) =>
-      btn.addEventListener("click", (e) => {
-        const index = parseInt(e.target.dataset.index, 10);
-        uploadedFiles.splice(index, 1);
-        updateFileList();
-        updatePreview();
-      })
-    );
+  // Global function for removing files (needed for onclick)
+  window.removeFile = function(index) {
+    files.splice(index, 1);
+    updateFileList();
+    updateSteps();
+    resetPreview();
+  }
 
-    processBtn.disabled = uploadedFiles.length === 0;
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
   // -----------------------------------------------------------------
-  // Watermark Handling
+  // Watermark handling
   // -----------------------------------------------------------------
-  document.getElementById("change-watermark").addEventListener("click", () => {
-    watermarkUpload.click();
-  });
-
-  watermarkUpload.addEventListener("change", (e) => {
+  function handleWatermarkUpload(e) {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = () => {
         watermarkImage.src = reader.result;
         watermarkPreview.src = reader.result;
+        watermarkPreview.style.display = 'block';
+        watermarkPlaceholder.style.display = 'none';
+        
+        // Clear gallery selection
+        document.querySelectorAll('.gallery-item').forEach(item => {
+          item.classList.remove('selected');
+        });
+        
+        resetPreview();
       };
       reader.readAsDataURL(file);
     }
-  });
+  }
 
   // -----------------------------------------------------------------
-  // Image Preview
+  // UI Updates
   // -----------------------------------------------------------------
-  function updatePreview() {
-    if (uploadedFiles.length === 0) {
-      previewCanvas.style.display = "none";
+  function updateSliderValues() {
+    opacityValue.textContent = `${opacitySlider.value}%`;
+    sizeValue.textContent = `${sizeSlider.value}%`;
+  }
+
+  function updateSteps() {
+    const steps = document.querySelectorAll('[data-step]');
+    const hasFiles = files.length > 0;
+    const hasWatermark = watermarkImage.complete && watermarkImage.naturalWidth > 0;
+    
+    // Step 1: Upload Images
+    updateStep(steps[0], true);
+    
+    // Step 2: Configure Watermark  
+    updateStep(steps[1], hasFiles || hasWatermark);
+    
+    // Step 3: Preview & Process
+    updateStep(steps[2], hasFiles && hasWatermark);
+    
+    // Enable/disable process button
+    processBtn.disabled = !(hasFiles && hasWatermark);
+  }
+
+  function updateStep(stepElement, active) {
+    if (active) {
+      stepElement.classList.add('active');
+    } else {
+      stepElement.classList.remove('active');
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Preview functionality
+  // -----------------------------------------------------------------
+  async function generatePreview() {
+    if (files.length === 0) {
+      showCustomAlert('Please upload some images first.');
       return;
     }
-
-    const file = uploadedFiles[currentFileIndex];
-    const img = new Image();
-    img.onload = () => {
-      const ctx = previewCanvas.getContext("2d");
-      previewCanvas.width = img.width;
-      previewCanvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-
-      applyWatermark(ctx, img.width, img.height);
-    };
-
-    if (file.name.endsWith(".heic")) {
-      heic2any({ blob: file }).then((converted) => {
-        img.src = URL.createObjectURL(converted);
-      });
-    } else {
-      img.src = URL.createObjectURL(file);
+    
+    if (!watermarkImage.complete || watermarkImage.naturalWidth === 0) {
+      showCustomAlert('Please select or upload a watermark image first.');
+      return;
     }
+    
+    showPreviewLoading();
+    processedPreviews = [];
+    currentPreviewIndex = 0;
+    
+    await processPreviewsSequentially(0);
   }
 
-  function applyWatermark(ctx, imgWidth, imgHeight) {
-    const watermarkWidth = (imgWidth * sizeSlider.value) / 100;
-    const watermarkHeight = (watermarkImage.height * watermarkWidth) / watermarkImage.width;
-    const margin = 20;
-
-    let x, y;
-    switch (positionSelect.value) {
-      case "top-left":
-        x = margin;
-        y = margin;
-        break;
-      case "top-right":
-        x = imgWidth - watermarkWidth - margin;
-        y = margin;
-        break;
-      case "center":
-        x = (imgWidth - watermarkWidth) / 2;
-        y = (imgHeight - watermarkHeight) / 2;
-        break;
-      case "bottom-left":
-        x = margin;
-        y = imgHeight - watermarkHeight - margin;
-        break;
-      case "bottom-right":
-      default:
-        x = imgWidth - watermarkWidth - margin;
-        y = imgHeight - watermarkHeight - margin;
-        break;
+  async function processPreviewsSequentially(index) {
+    if (index >= files.length) {
+      showPreview();
+      return;
     }
-
-    ctx.globalAlpha = opacitySlider.value / 100;
-    ctx.drawImage(watermarkImage, x, y, watermarkWidth, watermarkHeight);
-    ctx.globalAlpha = 1;
-  }
-
-  // -----------------------------------------------------------------
-  // Navigation
-  // -----------------------------------------------------------------
-  prevImageBtn.addEventListener("click", () => {
-    if (currentFileIndex > 0) {
-      currentFileIndex--;
-      updatePreview();
-    }
-  });
-
-  nextImageBtn.addEventListener("click", () => {
-    if (currentFileIndex < uploadedFiles.length - 1) {
-      currentFileIndex++;
-      updatePreview();
-    }
-  });
-
-  // -----------------------------------------------------------------
-  // Processing and Download
-  // -----------------------------------------------------------------
-  processBtn.addEventListener("click", () => {
-    const zip = new JSZip();
-    uploadedFiles.forEach((file, index) => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      // Draw image and watermark
+    
+    const item = files[index];
+    
+    try {
+      let imageData;
+      
+      if (item.type === 'url') {
+        // Load image from URL
+        imageData = await loadImageFromUrl(item.url);
+      } else {
+        // Load image from file
+        imageData = await loadImageFromFile(item.file);
+      }
+      
       const img = new Image();
       img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // Draw original image
+        ctx.drawImage(img, 0, 0);
+        
+        // Add watermark if available
+        if (watermarkImage.complete && watermarkImage.naturalWidth > 0) {
+          const watermarkSize = parseFloat(sizeSlider.value) / 100;
+          const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
+          const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
+          
+          const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
+          
+          ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
+          ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
+          ctx.globalAlpha = 1;
+        }
+        
+        processedPreviews.push({
+          canvas: canvas,
+          filename: item.name
+        });
+        
+        processPreviewsSequentially(index + 1);
+      };
+      
+      img.src = imageData;
+    } catch (error) {
+      console.error('Error processing image:', error);
+      showCustomAlert(`Error processing image: ${item.name}`);
+      processPreviewsSequentially(index + 1);
+    }
+  }
+
+  async function loadImageFromUrl(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
-        applyWatermark(ctx, img.width, img.height);
-
-        canvas.toBlob((blob) => {
-          zip.file(`image_${index + 1}.jpg`, blob);
-          if (index === uploadedFiles.length - 1) {
-            zip.generateAsync({ type: "blob" }).then((content) => {
-              const url = URL.createObjectURL(content);
-              downloadLink.href = url;
-              downloadLink.download = "watermarked_images.zip";
-              downloadSection.style.display = "block";
-            });
-          }
-        }, "image/jpeg");
+        resolve(canvas.toDataURL());
       };
-
-      img.src = URL.createObjectURL(file);
+      img.onerror = () => reject(new Error('Failed to load image from URL'));
+      img.src = url;
     });
-  });
+  }
+
+  async function loadImageFromFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function getWatermarkPosition(imgWidth, imgHeight, wmWidth, wmHeight) {
+    const margin = Math.max(20, Math.min(imgWidth, imgHeight) * 0.02);
+    const position = positionSelect.value;
+    
+    switch (position) {
+      case 'top-left':
+        return { x: margin, y: margin };
+      case 'top-right':
+        return { x: imgWidth - wmWidth - margin, y: margin };
+      case 'center':
+        return { x: (imgWidth - wmWidth) / 2, y: (imgHeight - wmHeight) / 2 };
+      case 'bottom-left':
+        return { x: margin, y: imgHeight - wmHeight - margin };
+      case 'bottom-right':
+      default:
+        return { x: imgWidth - wmWidth - margin, y: imgHeight - wmHeight - margin };
+    }
+  }
+
+  function showPreviewLoading() {
+    previewPlaceholder.style.display = 'none';
+    previewCanvas.style.display = 'none';
+    previewLoading.style.display = 'block';
+    previewInfo.style.display = 'none';
+    enlargePreviewBtn.style.display = 'none';
+  }
+
+  function showPreview() {
+    previewLoading.style.display = 'none';
+    previewPlaceholder.style.display = 'none';
+    previewCanvas.style.display = 'block';
+    previewInfo.style.display = 'flex';
+    enlargePreviewBtn.style.display = 'inline-flex';
+    
+    displayPreviewImage();
+  }
+
+  function displayPreviewImage() {
+    if (processedPreviews.length === 0) return;
+    
+    const preview = processedPreviews[currentPreviewIndex];
+    const ctx = previewCanvas.getContext('2d');
+    
+    // Set canvas size to fit container while maintaining aspect ratio
+    const container = previewCanvas.parentElement;
+    const maxWidth = container.clientWidth - 40;
+    const maxHeight = 400;
+    const ratio = Math.min(maxWidth / preview.canvas.width, maxHeight / preview.canvas.height);
+    
+    previewCanvas.width = preview.canvas.width * ratio;
+    previewCanvas.height = preview.canvas.height * ratio;
+    
+    ctx.drawImage(preview.canvas, 0, 0, previewCanvas.width, previewCanvas.height);
+    
+    previewFileName.textContent = preview.filename;
+    previewCounter.textContent = `${currentPreviewIndex + 1} / ${processedPreviews.length}`;
+    
+    prevImageBtn.disabled = currentPreviewIndex === 0;
+    nextImageBtn.disabled = currentPreviewIndex === processedPreviews.length - 1;
+  }
+
+  function navigatePreview(direction) {
+    const newIndex = currentPreviewIndex + direction;
+    if (newIndex >= 0 && newIndex < processedPreviews.length) {
+      currentPreviewIndex = newIndex;
+      displayPreviewImage();
+    }
+  }
+
+  function resetPreview() {
+    processedPreviews = [];
+    currentPreviewIndex = 0;
+    previewLoading.style.display = 'none';
+    previewCanvas.style.display = 'none';
+    previewInfo.style.display = 'none';
+    enlargePreviewBtn.style.display = 'none';
+    previewPlaceholder.style.display = 'block';
+  }
+
+  // -----------------------------------------------------------------
+  // Fullscreen Preview
+  // -----------------------------------------------------------------
+  function openFullscreenPreview() {
+    if (processedPreviews.length === 0) return;
+    
+    fullscreenModal.classList.add('active');
+    displayFullscreenImage();
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeFullscreenPreview() {
+    fullscreenModal.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
+  function displayFullscreenImage() {
+    if (processedPreviews.length === 0) return;
+    
+    const preview = processedPreviews[currentPreviewIndex];
+    const ctx = fullscreenCanvas.getContext('2d');
+    
+    // Set canvas size to fit screen while maintaining aspect ratio
+    const maxWidth = window.innerWidth * 0.9;
+    const maxHeight = window.innerHeight * 0.9;
+    const ratio = Math.min(maxWidth / preview.canvas.width, maxHeight / preview.canvas.height);
+    
+    fullscreenCanvas.width = preview.canvas.width * ratio;
+    fullscreenCanvas.height = preview.canvas.height * ratio;
+    
+    ctx.drawImage(preview.canvas, 0, 0, fullscreenCanvas.width, fullscreenCanvas.height);
+    
+    fullscreenFilename.textContent = preview.filename;
+    fullscreenCounter.textContent = `${currentPreviewIndex + 1} / ${processedPreviews.length}`;
+    
+    fullscreenPrev.disabled = currentPreviewIndex === 0;
+    fullscreenNext.disabled = currentPreviewIndex === processedPreviews.length - 1;
+  }
+
+  function navigateFullscreen(direction) {
+    const newIndex = currentPreviewIndex + direction;
+    if (newIndex >= 0 && newIndex < processedPreviews.length) {
+      currentPreviewIndex = newIndex;
+      displayFullscreenImage();
+      displayPreviewImage(); // Update small preview too
+    }
+  }
+
+  // -----------------------------------------------------------------
+  // Processing functionality
+  // -----------------------------------------------------------------
+  async function processImages() {
+    if (files.length === 0) {
+      showCustomAlert('Please upload some images first.');
+      return;
+    }
+    
+    if (!watermarkImage.complete || watermarkImage.naturalWidth === 0) {
+      showCustomAlert('Please select or upload a watermark image first.');
+      return;
+    }
+    
+    const btnText = processBtn.querySelector('.btn-text');
+    const btnLoader = processBtn.querySelector('.btn-loader');
+    
+    processBtn.disabled = true;
+    btnText.style.display = 'none';
+    btnLoader.style.display = 'flex';
+    
+    const zip = new JSZip();
+    let processedCount = 0;
+    
+    for (const item of files) {
+      try {
+        let imageData;
+        
+        if (item.type === 'url') {
+          imageData = await loadImageFromUrl(item.url);
+        } else {
+          imageData = await loadImageFromFile(item.file);
+        }
+        
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = imageData;
+        });
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // Draw original image
+        ctx.drawImage(img, 0, 0);
+        
+        // Calculate watermark dimensions and position
+        const watermarkSize = parseFloat(sizeSlider.value) / 100;
+        const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
+        const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
+        
+        const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
+        
+        // Apply opacity and draw watermark
+        ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
+        ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
+        ctx.globalAlpha = 1;
+        
+        // Convert to blob and add to zip
+        const blob = await new Promise(resolve => {
+          canvas.toBlob(resolve, 'image/jpeg', 0.9);
+        });
+        
+        const fileName = item.name.replace(/\.[^/.]+$/, '') + '_watermarked_FLR.jpg';
+        zip.file(fileName, blob);
+        
+        processedCount++;
+      } catch (error) {
+        console.error('Error processing image:', item.name, error);
+        showCustomAlert(`Error processing image: ${item.name}`);
+      }
+    }
+    
+    if (processedCount > 0) {
+      finalizeDownload(zip, btnText, btnLoader);
+    } else {
+      btnText.style.display = 'flex';
+      btnLoader.style.display = 'none';
+      processBtn.disabled = false;
+      showCustomAlert('No images were successfully processed.');
+    }
+  }
+
+  function finalizeDownload(zip, btnText, btnLoader) {
+    zip.generateAsync({ type: 'blob' }).then((content) => {
+      const url = URL.createObjectURL(content);
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+      downloadLink.href = url;
+      downloadLink.download = `watermarked_images_FLR_${timestamp}.zip`;
+      
+      btnText.style.display = 'flex';
+      btnLoader.style.display = 'none';
+      processBtn.disabled = false;
+      downloadSection.style.display = 'block';
+      
+      // Auto-scroll to download section
+      downloadSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // Modal functionality
+  // -----------------------------------------------------------------
+  function showModal(modal) {
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function hideModal(modal) {
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
+  // -----------------------------------------------------------------
+  // Theme toggle
+  // -----------------------------------------------------------------
+  function toggleTheme() {
+    document.body.classList.toggle('dark-mode');
+    updateThemeIcon();
+  }
+
+  // -----------------------------------------------------------------
+  // Custom Alert (replaces alert())
+  // -----------------------------------------------------------------
+  function showCustomAlert(message) {
+    const alertModal = document.createElement('div');
+    alertModal.className = 'modal active';
+    alertModal.innerHTML = `
+      <div class="modal-content glass-effect">
+        <div class="modal-header">
+          <h3><i class="fas fa-info-circle" style="color: var(--primary); margin-right: 0.5rem;"></i>Notice</h3>
+        </div>
+        <div class="modal-body">
+          <p style="color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.6;">${message}</p>
+          <div style="text-align: right;">
+            <button class="btn btn-primary glass-btn" onclick="this.closest('.modal').remove(); document.body.style.overflow = '';">
+              <i class="fas fa-check"></i>
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(alertModal);
+    document.body.style.overflow = 'hidden';
+    
+    // Auto-remove after click outside
+    alertModal.addEventListener('click', (e) => {
+      if (e.target === alertModal) {
+        alertModal.remove();
+        document.body.style.overflow = '';
+      }
+    });
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+      if (alertModal.parentNode) {
+        alertModal.remove();
+        document.body.style.overflow = '';
+      }
+    }, 10000);
+  }
 });
