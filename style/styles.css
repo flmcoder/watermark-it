@@ -1420,6 +1420,103 @@ body::before {
   transform: translateY(-2px);
 }
 
+
+
+/* =========================================
+   UPLOAD METHOD TABS
+   ========================================= */
+
+.upload-methods {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-2xl);
+  padding: var(--space-sm);
+  background: var(--glass-inner);
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(10px);
+}
+
+.upload-method-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-xl);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.upload-method-btn:hover {
+  background: rgba(210, 105, 30, 0.1);
+  color: var(--primary);
+}
+
+.upload-method-btn.active {
+  background: var(--bg-gradient-orange);
+  color: white;
+  box-shadow: 0 4px 15px rgba(210, 105, 30, 0.3);
+}
+
+.upload-method-btn i {
+  font-size: var(--font-size-lg);
+}
+
+.upload-section {
+  margin-top: var(--space-xl);
+}
+
+.url-input-container {
+  display: flex;
+  gap: var(--space-lg);
+  padding: var(--space-xl);
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+}
+
+.url-input {
+  flex: 1;
+  padding: var(--space-lg) var(--space-xl);
+  border: 2px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-inner);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  transition: var(--transition);
+}
+
+.url-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(210, 105, 30, 0.1);
+}
+
+.url-input::placeholder {
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .url-input-container {
+    flex-direction: column;
+    gap: var(--space-lg);
+  }
+  
+  .upload-methods {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+}
 /* =========================================
    MODAL
    ========================================= */
