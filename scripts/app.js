@@ -151,77 +151,71 @@ document.addEventListener("DOMContentLoaded", () => {
   // Watermark Gallery
   // -----------------------------------------------------------------
 
-// Include this in the code where watermark options are initialized, likely near `watermarkGallery` usage.
+function loadWatermarkGallery() {
+  // Hard-coded file paths for all watermarks in the `assets` folder
+  const imageFiles = [
+    "assets/Flat-white-stroke-watermark.png",
+    "assets/grey-watermark.png",
+    "assets/logo-watermark.png",
+    "assets/logo-watermark2.png",
+    "assets/rounded.png"
+  ];
 
-const watermarkOptions = [
-  // Other watermark images added in a similar way...
-  'assets/rounded.png', // Add this line to include the new rounded image
-];
+  // Clear gallery content before repopulating
+  watermarkGallery.innerHTML = '';
 
-// Populate watermark options into the watermark gallery dynamically
-watermarkOptions.forEach((src) => {
-  const imgElement = document.createElement('img');
-  imgElement.src = src;
-  imgElement.alt = 'Watermark Option';
-  imgElement.className = 'watermark-option';
-  imgElement.addEventListener('click', () => {
-    watermarkPreview.src = src; // Update preview with selected watermark
-    watermarkPreviewContainer.classList.remove('hidden'); // Show preview
+  imageFiles.forEach((filePath, index) => {
+    const galleryItem = document.createElement('div');
+    galleryItem.className = `gallery-item glass-inner ${index === 0 ? 'selected' : ''}`; // Default selection for the first item
+    galleryItem.title = filePath.split('/').pop(); // Extract file name from path
+    
+    const img = document.createElement('img');
+    img.src = filePath; // Apply image source URL
+    img.alt = filePath.split('/').pop();
+    img.loading = "lazy"; // Lazy-load optimization
+
+    // Append image to gallery item
+    galleryItem.appendChild(img);
+
+    // Add click event to set watermark selection
+    galleryItem.addEventListener('click', () => {
+      selectWatermark(index);
+    });
+
+    // Add the item to the watermark gallery
+    watermarkGallery.appendChild(galleryItem);
   });
-  watermarkGallery.appendChild(imgElement); // Add to the DOM
-});
-  
-  function loadWatermarkGallery() {
-    watermarkGallery.innerHTML = '';
-    
-    // Load all Fort Lowell watermarks
-    availableWatermarks.forEach((watermark, index) => {
-      const galleryItem = document.createElement('div');
-      galleryItem.className = `gallery-item glass-inner ${index === 0 ? 'selected' : ''}`;
-      galleryItem.title = watermark.name;
-      
-      const img = document.createElement('img');
-      img.alt = watermark.name;
-      img.loading = 'lazy';
-      img.src = watermark.url;
-      
-      galleryItem.appendChild(img);
-      galleryItem.addEventListener('click', () => selectWatermark(index));
-      watermarkGallery.appendChild(galleryItem);
-    });
-    
-    // Set default watermark (first one - the new premium banner)
-    selectWatermark(0);
-  }
 
-  function selectWatermark(index) {
-    // Update gallery selection
-    document.querySelectorAll('.gallery-item').forEach((item, i) => {
-      item.classList.toggle('selected', i === index);
-    });
-    
-    selectedWatermarkIndex = index;
-    isCustomWatermark = false;
-    const watermark = availableWatermarks[index];
-    
-    // Load watermark image
-    watermarkImage.onload = () => {
-      watermarkPreview.src = watermarkImage.src;
-      watermarkPreview.style.display = 'block';
-      watermarkPlaceholder.style.display = 'none';
-      resetPreview();
-      updateSteps();
-      console.log(`Professional watermark loaded: ${watermark.name}`);
-    };
-    
-    watermarkImage.onerror = () => {
-      console.error(`Failed to load watermark: ${watermark.name}`);
-      showCustomAlert(`Error loading watermark: ${watermark.name}`);
-    };
-    
-    // Load the watermark
-    watermarkImage.src = watermark.url;
-  }
+  // Select the first watermark as default
+  selectWatermark(0);
+}
+
+function selectWatermark(index) {
+  // Update selection visual state
+  const galleryItems = document.querySelectorAll('.gallery-item');
+  galleryItems.forEach((item, i) => {
+    item.classList.toggle('selected', i === index);
+  });
+
+  // Load selected watermark into the preview
+  const selectedImage = galleryItems[index].querySelector('img');
+  
+  watermarkImage.onload = () => {
+    watermarkPreview.src = watermarkImage.src;
+    watermarkPreview.style.display = 'block';
+    watermarkPlaceholder.style.display = 'none';
+    resetPreview();
+    updateSteps();
+    console.log(`Watermark loaded: ${selectedImage.alt}`);
+  };
+
+  watermarkImage.onerror = () => {
+    console.error(`Failed to load watermark: ${selectedImage.alt}`);
+    showCustomAlert(`Error loading watermark: ${selectedImage.alt}`);
+  };
+
+  watermarkImage.src = selectedImage.src;
+}
 
   // -----------------------------------------------------------------
   // Event Listeners
