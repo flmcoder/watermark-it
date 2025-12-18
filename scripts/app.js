@@ -150,6 +150,27 @@ document.addEventListener("DOMContentLoaded", () => {
   // -----------------------------------------------------------------
   // Watermark Gallery
   // -----------------------------------------------------------------
+
+// Include this in the code where watermark options are initialized, likely near `watermarkGallery` usage.
+
+const watermarkOptions = [
+  // Other watermark images added in a similar way...
+  'assets/rounded.png', // Add this line to include the new rounded image
+];
+
+// Populate watermark options into the watermark gallery dynamically
+watermarkOptions.forEach((src) => {
+  const imgElement = document.createElement('img');
+  imgElement.src = src;
+  imgElement.alt = 'Watermark Option';
+  imgElement.className = 'watermark-option';
+  imgElement.addEventListener('click', () => {
+    watermarkPreview.src = src; // Update preview with selected watermark
+    watermarkPreviewContainer.classList.remove('hidden'); // Show preview
+  });
+  watermarkGallery.appendChild(imgElement); // Add to the DOM
+});
+  
   function loadWatermarkGallery() {
     watermarkGallery.innerHTML = '';
     
