@@ -713,14 +713,16 @@ body::before {
    ========================================= */
 
 .watermark-gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: var(--space-lg);
-  margin-bottom: var(--space-2xl);
+  display: flex; /* Arrange items as flex containers */
+  flex-direction: column; /* Stack items vertically */
+  gap: 15px; /* Space between items */
+  align-items: center; /* Center items horizontally */
 }
 
 .gallery-item {
-  aspect-ratio: 1;
+  aspect-ratio: unset; /* Remove fixed square ratio */
+  width: 100%; /* Make items full-width */
+  max-height: 100px; /* Limit the height for preview */
   border-radius: var(--radius-xl);
   overflow: hidden;
   cursor: pointer;
@@ -731,37 +733,16 @@ body::before {
   backdrop-filter: blur(10px);
 }
 
-.gallery-item::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(210, 105, 30, 0.1), rgba(255, 140, 66, 0.1));
-  opacity: 0;
-  transition: var(--transition);
-}
-
-.gallery-item:hover::before {
-  opacity: 1;
-}
-
-.gallery-item:hover {
-  border-color: var(--primary-light);
-  transform: scale(1.1) rotate(2deg);
-  box-shadow: 0 12px 30px rgba(210, 105, 30, 0.3);
+.gallery-item img {
+  width: 100%;
+  height: auto; /* Maintain natural aspect ratio of images */
+  object-fit: contain; /* Non-distorted scaling */
 }
 
 .gallery-item.selected {
   border-color: var(--primary);
   background: rgba(210, 105, 30, 0.1);
   box-shadow: 0 8px 25px rgba(210, 105, 30, 0.4);
-}
-
-.gallery-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  position: relative;
-  z-index: 1;
 }
 
 /* =========================================
