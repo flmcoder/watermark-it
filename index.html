@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Watermark-It | Professional Property Image Watermarking - Fort Lowell Realty</title>
+  <title>Watermark-It - The Easy Tool For Property Photos
+  </title>
   <meta name="description" content="Professional real estate image watermarking tool with live preview, batch processing, and modern glassmorphism interface by Fort Lowell Realty & Property Management.">
   <meta name="keywords" content="watermark, real estate, image processing, Fort Lowell Realty, property photos, batch processing">
 
   <!-- Open Graph Meta Tags -->
-  <meta property="og:title" content="Watermark-It - Professional Property Image Watermarking">
+  <meta property="og:title" content="Watermark-It">
   <meta property="og:description" content="Brand your real estate images with Fort Lowell Realty watermarks. Professional batch processing with live preview.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://pfst.cf2.poecdn.net/base/image/6d5c1c170575ce0a42988a32013449025819fe5c5d775f22ed0a42043e4d5768?w=1200&h=630">
@@ -44,7 +45,7 @@
              loading="eager">
         <div class="brand-text">
           <h1>Watermark-It</h1>
-          <span class="brand-subtitle">by Fort Lowell Realty</span>
+          <span class="brand-subtitle"><strong>Fortify Your Investment</strong></span>
         </div>
       </div>
       <div class="nav-actions">
@@ -63,7 +64,9 @@
   <section class="hero-compact">
     <div class="hero-content-compact">
       <h2>Professional Property Image Watermarking</h2>
-      <p>Upload images, select a watermark, preview, and download. Supports JPG, PNG, WebP, HEIC, and ZIP files.</p>
+      <p>Upload images, select a watermark, preview, and download.</p>
+      <p>
+      Supports JPG, PNG, WebP, HEIC, and ZIP files.</p>
     </div>
   </section>
 
@@ -172,14 +175,22 @@
           </div>
 
           <div class="settings-content">
-            <!-- Professional Watermark Gallery -->
+            <!-- Watermark dropdown -->
             <div class="setting-group">
-              <div class="watermark-gallery" id="watermark-gallery">
-                <!-- Gallery will be populated by JavaScript with professional watermarks -->
+              <label class="setting-label" for="watermark-select">
+                <span>
+                  <i class="fas fa-images"></i>
+                  Choose Watermark
+                </span>
+              </label>
+              <div class="select-wrapper watermark-select-wrapper">
+                <select id="watermark-select" class="custom-select glass-inner"></select>
+                <i class="fas fa-chevron-down select-icon"></i>
               </div>
+              <p class="watermark-helper-text">All options are loaded from <code>./assets/</code>. Default: rounded (white background).</p>
             </div>
 
-            <!-- Current Selection Preview - FIXED to show full watermark -->
+            <!-- Current Selection Preview -->
             <div class="setting-group">
               <label class="setting-label">
                 <span>
@@ -406,8 +417,7 @@
              class="footer-logo"
              loading="lazy">
         <div class="footer-info">
-          <p>&copy; 2025 Watermark-It by <strong>Fort Lowell Realty & Property Management</strong></p>
-          <p>Professional real estate services in Arizona &bull; <strong>Fortify Your Investment</strong></p>
+          <p>&copy; 2026   Watermark-It &bull;<strong> Fort Lowell Realty & Property Management</strong></p>
         </div>
       </div>
       <div class="footer-links">
@@ -439,7 +449,7 @@
             <div class="help-number">1</div>
             <div class="help-content">
               <h4>Upload Images</h4>
-              <p>Drag and drop your property photos, upload files/ZIP archives, or paste multiple image URLs. Supports JPG, PNG, WebP, and <strong>HEIC</strong> formats. HEIC files are automatically converted to JPEG.</p>
+              <p>Drag and drop your property photos, upload files/ZIP archives, or paste multiple image URLs. Supports JPG, PNG, WebP, and <strong>HEIC</strong> formats. HEIC files are now automatically converted to JPEG.</p>
             </div>
           </div>
           <div class="help-step">
@@ -453,38 +463,47 @@
             <div class="help-number">3</div>
             <div class="help-content">
               <h4>Adjust Settings</h4>
-              <p>Fine-tune position, opacity, and size to get the perfect watermark placement for your images.</p>
+              <p>Fine-tune desired position, transparency, and size to get the perfect watermark placement for your images.</p>
             </div>
           </div>
           <div class="help-step">
             <div class="help-number">4</div>
             <div class="help-content">
               <h4>Preview</h4>
-              <p>Generate a live preview to see exactly how your branded images will look. Navigate through all images to verify.</p>
+              <p>Generate a live preview of all images <b>first</b> to see exactly how your branded images will look. Navigate through all images to verify.</p>
             </div>
           </div>
           <div class="help-step">
             <div class="help-number">5</div>
             <div class="help-content">
               <h4>Download</h4>
-              <p>Process all images and download as a ZIP archive. All images are exported as high-quality JPEGs.</p>
+              <p>Download all processed images as a batch. All images are exported as high-quality JPEGs.</p>
             </div>
           </div>
         </div>
+          <div class="help-step">
+            <div class="help-number">6</div>
+            <div class="help-content">
+              <h4>Need help?</h4>
+              <p>If you're still experiencing issues, use the contact button at the bottom of the page.</P>
+            </div>
+            </div> 
+          </div>
 
         <div class="help-tips glass-inner">
           <h4><i class="fas fa-lightbulb"></i> Pro Tips</h4>
           <ul>
-            <li><i class="fas fa-check"></i> HEIC files from iPhones are automatically converted</li>
-            <li><i class="fas fa-check"></i> Use high-resolution photos for best results</li>
-            <li><i class="fas fa-check"></i> 75% opacity provides good visibility without overpowering</li>
-            <li><i class="fas fa-check"></i> Process multiple photos at once for efficiency</li>
+            <li><i class="fas fa-check"></i> HEIC files from iPhones/Android are automatically converted</li>
+            <li><i class="fas fa-check"></i> Use high-resolution photos for best results.</li>
+            <li><i class="fas fa-check"></i> 60-75% opacity provides good visibility without overpowering. Centered is standard.</li>
+            <li><i class="fas fa-check"></i> Process multiple photos at once for efficiency. FOR FREE.</li>
           </ul>
         </div>
       </div>
     </div>
   </div>
 
-  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="scripts/app.js"></script>
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+  <script src="scripts/app.js"></script>
 </body>
 </html>
