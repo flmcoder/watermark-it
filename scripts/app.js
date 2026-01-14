@@ -112,10 +112,7 @@ const HeicConverter = {
         quality: 0.92
       });
 
-      // heic2any can return an array if the HEIC contains multiple images
       const resultBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-
-      // Create a new File object with .jpg extension
       const originalName = file.name.replace(/\.(heic|heif)$/i, '');
       const newFileName = `${originalName}.jpg`;
 
@@ -134,12 +131,10 @@ const HeicConverter = {
     const heicFiles = files.filter(f => this.isHeicFile(f));
     const nonHeicFiles = files.filter(f => !this.isHeicFile(f));
 
-    // Add non-HEIC files directly
     for (const file of nonHeicFiles) {
       results.push({ file, converted: false, originalName: file.name });
     }
 
-    // Convert HEIC files
     for (let i = 0; i < heicFiles.length; i++) {
       const file = heicFiles[i];
       try {
@@ -218,7 +213,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const watermarkPreview = document.getElementById("watermark-preview");
   const watermarkPreviewContainer = document.getElementById("watermark-preview-container");
   const watermarkPlaceholder = document.getElementById("watermark-placeholder");
-  const watermarkGallery = document.getElementById("watermark-gallery");
   const positionSelect = document.getElementById("position-select");
   const opacitySlider = document.getElementById("opacity-slider");
   const sizeSlider = document.getElementById("size-slider");
@@ -259,33 +253,34 @@ document.addEventListener("DOMContentLoaded", () => {
   const fullscreenFilename = document.getElementById("fullscreen-filename");
   const fullscreenCounter = document.getElementById("fullscreen-counter");
 
+  // Watermark dropdown
+  const watermarkSelect = document.getElementById("watermark-select");
+
   // -----------------------------------------------------------------
   // App State
   // -----------------------------------------------------------------
   let watermarkImage = new Image();
-  watermarkImage.crossOrigin = "anonymous";
-
-  // Watermarks using CDN URLs from the uploaded images
-  const availableWatermarks = [
+  let availableWatermarks = [
     {
-      name: "Fort Lowell Premium Banner",
-      url: "https://pfst.cf2.poecdn.net/base/image/d733ab95ffb19192be374da87a96c29964f994288f429ada054eb697315660ba?w=3600&h=1024"
+      name: "Rounded (white background) – Default",
+      url: "./assets/rounded.png",
+      default: true
     },
     {
-      name: "Fort Lowell Orange Banner",
-      url: "https://pfst.cf2.poecdn.net/base/image/6d5c1c170575ce0a42988a32013449025819fe5c5d775f22ed0a42043e4d5768?w=3600&h=1024"
+      name: "Logo Watermark",
+      url: "./assets/logo-watermark.png"
     },
     {
-      name: "Fort Lowell Grey Banner",
-      url: "https://pfst.cf2.poecdn.net/base/image/911f4cc97598a591680f81a4f8ae0e0ab9a94f433dc324b57d6915d144f19b94?w=3600&h=1024"
+      name: "Logo Watermark 2",
+      url: "./assets/logo-watermark2.png"
     },
     {
-      name: "Fort Lowell Gold Banner",
-      url: "https://pfst.cf2.poecdn.net/base/image/82176094812d5c1748ac45ac7353dba068754e350effc874dbbcdf415bfae8bc?w=935&h=266"
+      name: "Grey Watermark",
+      url: "./assets/grey-watermark.png"
     },
     {
-      name: "Fort Lowell Orange Alt",
-      url: "https://pfst.cf2.poecdn.net/base/image/df10a509049e8085ede13109f49ec911f6b467169ff9eb6a9b6839be7cce0bca?w=3600&h=1024"
+      name: "Flat White Stroke",
+      url: "./assets/Flat-white-stroke-watermark.png"
     }
   ];
 
@@ -304,7 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function init() {
     setupEventListeners();
-    loadWatermarkGallery();
+    loadWatermarkOptions();
     setDefaultSettings();
     updateSliderValues();
     updateSteps();
@@ -317,47 +312,30 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // -----------------------------------------------------------------
-  // Watermark Gallery
+  // Watermark Dropdown
   // -----------------------------------------------------------------
 
-  function loadWatermarkGallery() {
-    watermarkGallery.innerHTML = '';
-
+  function loadWatermarkOptions() {
+    watermarkSelect.innerHTML = '';
     availableWatermarks.forEach((watermark, index) => {
-      const galleryItem = document.createElement('div');
-      galleryItem.className = `gallery-item glass-inner ${index === 0 ? 'selected' : ''}`;
-      galleryItem.title = watermark.name;
-
-      const img = document.createElement('img');
-      img.src = watermark.url;
-      img.alt = watermark.name;
-      img.loading = "lazy";
-      img.crossOrigin = "anonymous";
-
-      galleryItem.appendChild(img);
-
-      galleryItem.addEventListener('click', () => {
-        selectWatermark(index);
-      });
-
-      watermarkGallery.appendChild(galleryItem);
+      const opt = document.createElement('option');
+      opt.value = index;
+      opt.textContent = watermark.name;
+      watermarkSelect.appendChild(opt);
     });
 
-    // Select the first watermark as default
-    selectWatermark(0);
+    const defaultIndex = availableWatermarks.findIndex(wm => wm.default) >= 0
+      ? availableWatermarks.findIndex(wm => wm.default)
+      : 0;
+
+    watermarkSelect.value = String(defaultIndex);
+    selectWatermark(defaultIndex);
   }
 
   function selectWatermark(index) {
     selectedWatermarkIndex = index;
     isCustomWatermark = false;
 
-    // Update selection visual state
-    const galleryItems = document.querySelectorAll('.gallery-item');
-    galleryItems.forEach((item, i) => {
-      item.classList.toggle('selected', i === index);
-    });
-
-    // Load selected watermark into the preview
     const selectedWatermarkData = availableWatermarks[index];
 
     watermarkImage.onload = () => {
@@ -374,6 +352,17 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     watermarkImage.src = selectedWatermarkData.url;
+  }
+
+  function setCustomWatermarkLabel(label = 'Custom Upload') {
+    let opt = watermarkSelect.querySelector('option[value="custom"]');
+    if (!opt) {
+      opt = document.createElement('option');
+      opt.value = 'custom';
+      watermarkSelect.appendChild(opt);
+    }
+    opt.textContent = label;
+    watermarkSelect.value = 'custom';
   }
 
   // -----------------------------------------------------------------
@@ -399,6 +388,14 @@ document.addEventListener("DOMContentLoaded", () => {
       watermarkUpload.click();
     });
     watermarkUpload.addEventListener("change", handleWatermarkUpload);
+
+    // Watermark dropdown
+    watermarkSelect.addEventListener("change", (e) => {
+      const val = e.target.value;
+      if (val === 'custom') return; // custom handled via upload
+      const idx = parseInt(val, 10);
+      if (!isNaN(idx)) selectWatermark(idx);
+    });
 
     // Advanced toggle
     const advancedToggle = document.getElementById("advanced-toggle");
@@ -429,7 +426,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Keyboard navigation
     document.addEventListener("keydown", (e) => {
       if (fullscreenModal.classList.contains('active')) {
-        switch(e.key) {
+        switch (e.key) {
           case 'Escape':
             closeFullscreenPreview();
             break;
@@ -502,7 +499,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function switchUploadMethod(method) {
     currentUploadMethod = method;
 
-    // Update tab appearance
     document.querySelectorAll('.upload-method-btn').forEach(btn => {
       btn.classList.remove('active');
     });
@@ -544,7 +540,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    const heicTypes = ['image/heic', 'image/heif'];
     const zipTypes = ['application/zip', 'application/x-zip-compressed'];
 
     const filesToProcess = Array.from(fileList);
@@ -552,7 +547,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const regularFiles = [];
     const zipFiles = [];
 
-    // Categorize files
     for (const file of filesToProcess) {
       if (HeicConverter.isHeicFile(file)) {
         heicFiles.push(file);
@@ -563,35 +557,31 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Add regular files immediately
     for (const file of regularFiles) {
       files.push({ file, type: 'file', name: file.name, converted: false });
     }
 
-    // Process ZIP files
     for (const zipFile of zipFiles) {
       await handleZipFile(zipFile);
     }
 
-    // Convert HEIC files if any
     if (heicFiles.length > 0) {
       isProcessingHeic = true;
 
       Toast.info(
         'Converting HEIC Files',
         `Converting ${heicFiles.length} HEIC file${heicFiles.length > 1 ? 's' : ''} to JPEG...`,
-        0 // Don't auto-dismiss
+        0
       );
 
       try {
         const convertedResults = await HeicConverter.convertMultiple(
           heicFiles,
           (current, total, fileName) => {
-            // Progress callback - could update UI if needed
+            // Progress callback if needed
           }
         );
 
-        // Add converted files
         let successCount = 0;
         for (const result of convertedResults) {
           if (result.converted) {
@@ -606,7 +596,6 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
 
-        // Dismiss the processing toast and show success
         const toasts = document.querySelectorAll('.toast-info');
         toasts.forEach(t => Toast.dismiss(t));
 
@@ -654,7 +643,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      // Convert HEIC files from ZIP
       if (heicFilesInZip.length > 0) {
         Toast.info('Converting HEIC from ZIP', `Found ${heicFilesInZip.length} HEIC files in ZIP, converting...`);
 
@@ -690,7 +678,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Split by newlines to support multiple URLs
     const urls = urlText.split('\n')
       .map(url => url.trim())
       .filter(url => url.length > 0);
@@ -794,7 +781,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateFileList();
     updateSteps();
     resetPreview();
-  }
+  };
 
   function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
@@ -818,11 +805,7 @@ document.addEventListener("DOMContentLoaded", () => {
         watermarkPlaceholder.style.display = 'none';
         isCustomWatermark = true;
 
-        // Clear gallery selection
-        document.querySelectorAll('.gallery-item').forEach(item => {
-          item.classList.remove('selected');
-        });
-
+        setCustomWatermarkLabel('Custom Upload');
         resetPreview();
         updateSteps();
         Toast.success('Custom Watermark', 'Custom watermark uploaded successfully.');
@@ -844,22 +827,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const hasFiles = files.length > 0;
     const hasWatermark = watermarkImage.complete && watermarkImage.naturalWidth > 0;
 
-    // Step 1: Upload Images
     updateStep(steps[0], hasFiles);
-
-    // Step 2: Configure Watermark
     updateStep(steps[1], hasWatermark);
-
-    // Step 3: Adjust
     updateStep(steps[2], hasWatermark);
-
-    // Step 4: Preview
     updateStep(steps[3], hasFiles && hasWatermark);
-
-    // Step 5: Download
     updateStep(steps[4], hasFiles && hasWatermark);
 
-    // Enable/disable buttons
     processBtn.disabled = !(hasFiles && hasWatermark);
     generatePreviewBtn.disabled = !(hasFiles && hasWatermark);
   }
@@ -918,10 +891,8 @@ document.addEventListener("DOMContentLoaded", () => {
         canvas.width = img.width;
         canvas.height = img.height;
 
-        // Draw original image
         ctx.drawImage(img, 0, 0);
 
-        // Add watermark
         if (watermarkImage.complete && watermarkImage.naturalWidth > 0) {
           const watermarkSize = parseFloat(sizeSlider.value) / 100;
           const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
@@ -1148,22 +1119,18 @@ document.addEventListener("DOMContentLoaded", () => {
         canvas.width = img.width;
         canvas.height = img.height;
 
-        // Draw original image
         ctx.drawImage(img, 0, 0);
 
-        // Calculate watermark dimensions and position
         const watermarkSize = parseFloat(sizeSlider.value) / 100;
         const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
         const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
 
         const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
 
-        // Apply opacity and draw watermark
         ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
         ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
         ctx.globalAlpha = 1;
 
-        // Convert to blob and add to zip
         const blob = await new Promise(resolve => {
           canvas.toBlob(resolve, 'image/jpeg', 0.92);
         });
