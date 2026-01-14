@@ -1,4 +1,169 @@
 // =========================================
+// TOAST NOTIFICATION SYSTEM
+// =========================================
+
+const Toast = {
+  container: null,
+
+  init() {
+    this.container = document.getElementById('toast-container');
+    if (!this.container) {
+      this.container = document.createElement('div');
+      this.container.id = 'toast-container';
+      this.container.className = 'toast-container';
+      document.body.appendChild(this.container);
+    }
+  },
+
+  show(options) {
+    const {
+      type = 'info',
+      title = '',
+      message = '',
+      duration = 5000,
+      icon = null
+    } = options;
+
+    const icons = {
+      success: 'fas fa-check-circle',
+      warning: 'fas fa-exclamation-triangle',
+      error: 'fas fa-times-circle',
+      info: 'fas fa-info-circle',
+      conversion: 'fas fa-sync-alt'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+      <i class="toast-icon ${icon || icons[type] || icons.info}"></i>
+      <div class="toast-content">
+        ${title ? `<div class="toast-title">${title}</div>` : ''}
+        <div class="toast-message">${message}</div>
+      </div>
+      <button class="toast-close" aria-label="Close">
+        <i class="fas fa-times"></i>
+      </button>
+    `;
+
+    const closeBtn = toast.querySelector('.toast-close');
+    closeBtn.addEventListener('click', () => this.dismiss(toast));
+
+    this.container.appendChild(toast);
+
+    if (duration > 0) {
+      setTimeout(() => this.dismiss(toast), duration);
+    }
+
+    return toast;
+  },
+
+  dismiss(toast) {
+    if (!toast || !toast.parentNode) return;
+    toast.classList.add('toast-exit');
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 300);
+  },
+
+  success(title, message, duration = 4000) {
+    return this.show({ type: 'success', title, message, duration });
+  },
+
+  warning(title, message, duration = 5000) {
+    return this.show({ type: 'warning', title, message, duration });
+  },
+
+  error(title, message, duration = 6000) {
+    return this.show({ type: 'error', title, message, duration });
+  },
+
+  info(title, message, duration = 4000) {
+    return this.show({ type: 'info', title, message, duration });
+  },
+
+  conversion(title, message, duration = 5000) {
+    return this.show({ type: 'conversion', title, message, duration, icon: 'fas fa-exchange-alt' });
+  }
+};
+
+// =========================================
+// HEIC CONVERSION UTILITIES
+// =========================================
+
+const HeicConverter = {
+  isHeicFile(file) {
+    const fileName = file.name.toLowerCase();
+    const isHeicExtension = fileName.endsWith('.heic') || fileName.endsWith('.heif');
+    const isHeicType = file.type === 'image/heic' || file.type === 'image/heif';
+    return isHeicExtension || isHeicType;
+  },
+
+  async convert(file) {
+    if (typeof heic2any === 'undefined') {
+      throw new Error('HEIC conversion library not loaded');
+    }
+
+    try {
+      const convertedBlob = await heic2any({
+        blob: file,
+        toType: 'image/jpeg',
+        quality: 0.92
+      });
+
+      // heic2any can return an array if the HEIC contains multiple images
+      const resultBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+
+      // Create a new File object with .jpg extension
+      const originalName = file.name.replace(/\.(heic|heif)$/i, '');
+      const newFileName = `${originalName}.jpg`;
+
+      return new File([resultBlob], newFileName, {
+        type: 'image/jpeg',
+        lastModified: Date.now()
+      });
+    } catch (error) {
+      console.error('HEIC conversion error:', error);
+      throw new Error(`Failed to convert ${file.name}: ${error.message}`);
+    }
+  },
+
+  async convertMultiple(files, onProgress) {
+    const results = [];
+    const heicFiles = files.filter(f => this.isHeicFile(f));
+    const nonHeicFiles = files.filter(f => !this.isHeicFile(f));
+
+    // Add non-HEIC files directly
+    for (const file of nonHeicFiles) {
+      results.push({ file, converted: false, originalName: file.name });
+    }
+
+    // Convert HEIC files
+    for (let i = 0; i < heicFiles.length; i++) {
+      const file = heicFiles[i];
+      try {
+        if (onProgress) {
+          onProgress(i + 1, heicFiles.length, file.name);
+        }
+
+        const convertedFile = await this.convert(file);
+        results.push({
+          file: convertedFile,
+          converted: true,
+          originalName: file.name
+        });
+      } catch (error) {
+        console.error(`Failed to convert ${file.name}:`, error);
+        Toast.error('Conversion Failed', `Could not convert ${file.name}. The file may be corrupted or unsupported.`);
+      }
+    }
+
+    return results;
+  }
+};
+
+// =========================================
 // THEME & INITIALIZATION
 // =========================================
 
@@ -7,7 +172,7 @@ function initializeTheme() {
   if (isDark) {
     document.body.classList.add('dark-mode');
   }
-  
+
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
     if (event.matches) {
       document.body.classList.add('dark-mode');
@@ -16,7 +181,7 @@ function initializeTheme() {
     }
     updateThemeIcon();
   });
-  
+
   updateThemeIcon();
 }
 
@@ -35,6 +200,9 @@ function updateThemeIcon() {
 // =========================================
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Initialize toast system
+  Toast.init();
+
   // Initialize theme
   initializeTheme();
 
@@ -73,7 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const helpBtn = document.getElementById("help-btn");
   const closeHelp = document.getElementById("close-help");
   const themeToggle = document.getElementById("theme-toggle");
-  
+
   // Upload method elements
   const filesTab = document.getElementById("files-tab");
   const urlTab = document.getElementById("url-tab");
@@ -81,7 +249,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const urlUpload = document.getElementById("url-upload");
   const imageUrlInput = document.getElementById("image-url-input");
   const addUrlBtn = document.getElementById("add-url-btn");
-  
+
   // Fullscreen modal elements
   const fullscreenModal = document.getElementById("fullscreen-modal");
   const fullscreenCanvas = document.getElementById("fullscreen-canvas");
@@ -96,37 +264,38 @@ document.addEventListener("DOMContentLoaded", () => {
   // -----------------------------------------------------------------
   let watermarkImage = new Image();
   watermarkImage.crossOrigin = "anonymous";
-  
-  // Fort Lowell Realty Professional Watermarks - Updated with new default
+
+  // Watermarks using CDN URLs from the uploaded images
   const availableWatermarks = [
-    { 
-      name: "Fort Lowell Premium Banner (Default)", 
+    {
+      name: "Fort Lowell Premium Banner",
       url: "https://pfst.cf2.poecdn.net/base/image/d733ab95ffb19192be374da87a96c29964f994288f429ada054eb697315660ba?w=3600&h=1024"
     },
-    { 
-      name: "Fort Lowell Orange Banner", 
+    {
+      name: "Fort Lowell Orange Banner",
       url: "https://pfst.cf2.poecdn.net/base/image/6d5c1c170575ce0a42988a32013449025819fe5c5d775f22ed0a42043e4d5768?w=3600&h=1024"
     },
-    { 
-      name: "Fort Lowell Grey Banner", 
+    {
+      name: "Fort Lowell Grey Banner",
       url: "https://pfst.cf2.poecdn.net/base/image/911f4cc97598a591680f81a4f8ae0e0ab9a94f433dc324b57d6915d144f19b94?w=3600&h=1024"
     },
-    { 
-      name: "Fort Lowell Orange Banner Alt", 
-      url: "https://pfst.cf2.poecdn.net/base/image/df10a509049e8085ede13109f49ec911f6b467169ff9eb6a9b6839be7cce0bca?w=3600&h=1024"
-    },
-    { 
-      name: "Fort Lowell Gold Banner", 
+    {
+      name: "Fort Lowell Gold Banner",
       url: "https://pfst.cf2.poecdn.net/base/image/82176094812d5c1748ac45ac7353dba068754e350effc874dbbcdf415bfae8bc?w=935&h=266"
+    },
+    {
+      name: "Fort Lowell Orange Alt",
+      url: "https://pfst.cf2.poecdn.net/base/image/df10a509049e8085ede13109f49ec911f6b467169ff9eb6a9b6839be7cce0bca?w=3600&h=1024"
     }
   ];
-  
+
   const files = [];
   let processedPreviews = [];
   let currentPreviewIndex = 0;
   let selectedWatermarkIndex = 0;
   let currentUploadMethod = 'files';
   let isCustomWatermark = false;
+  let isProcessingHeic = false;
 
   // -----------------------------------------------------------------
   // Initialize app
@@ -151,71 +320,61 @@ document.addEventListener("DOMContentLoaded", () => {
   // Watermark Gallery
   // -----------------------------------------------------------------
 
-function loadWatermarkGallery() {
-  // Hard-coded file paths for all watermarks in the `assets` folder
-  const imageFiles = [
-    "assets/Flat-white-stroke-watermark.png",
-    "assets/grey-watermark.png",
-    "assets/logo-watermark.png",
-    "assets/logo-watermark2.png",
-    "assets/rounded.png"
-  ];
+  function loadWatermarkGallery() {
+    watermarkGallery.innerHTML = '';
 
-  // Clear gallery content before repopulating
-  watermarkGallery.innerHTML = '';
+    availableWatermarks.forEach((watermark, index) => {
+      const galleryItem = document.createElement('div');
+      galleryItem.className = `gallery-item glass-inner ${index === 0 ? 'selected' : ''}`;
+      galleryItem.title = watermark.name;
 
-  imageFiles.forEach((filePath, index) => {
-    const galleryItem = document.createElement('div');
-    galleryItem.className = `gallery-item glass-inner ${index === 0 ? 'selected' : ''}`; // Default selection for the first item
-    galleryItem.title = filePath.split('/').pop(); // Extract file name from path
-    
-    const img = document.createElement('img');
-    img.src = filePath; // Apply image source URL
-    img.alt = filePath.split('/').pop();
-    img.loading = "lazy"; // Lazy-load optimization
+      const img = document.createElement('img');
+      img.src = watermark.url;
+      img.alt = watermark.name;
+      img.loading = "lazy";
+      img.crossOrigin = "anonymous";
 
-    // Append image to gallery item
-    galleryItem.appendChild(img);
+      galleryItem.appendChild(img);
 
-    // Add click event to set watermark selection
-    galleryItem.addEventListener('click', () => {
-      selectWatermark(index);
+      galleryItem.addEventListener('click', () => {
+        selectWatermark(index);
+      });
+
+      watermarkGallery.appendChild(galleryItem);
     });
 
-    // Add the item to the watermark gallery
-    watermarkGallery.appendChild(galleryItem);
-  });
+    // Select the first watermark as default
+    selectWatermark(0);
+  }
 
-  // Select the first watermark as default
-  selectWatermark(0);
-}
+  function selectWatermark(index) {
+    selectedWatermarkIndex = index;
+    isCustomWatermark = false;
 
-function selectWatermark(index) {
-  // Update selection visual state
-  const galleryItems = document.querySelectorAll('.gallery-item');
-  galleryItems.forEach((item, i) => {
-    item.classList.toggle('selected', i === index);
-  });
+    // Update selection visual state
+    const galleryItems = document.querySelectorAll('.gallery-item');
+    galleryItems.forEach((item, i) => {
+      item.classList.toggle('selected', i === index);
+    });
 
-  // Load selected watermark into the preview
-  const selectedImage = galleryItems[index].querySelector('img');
-  
-  watermarkImage.onload = () => {
-    watermarkPreview.src = watermarkImage.src;
-    watermarkPreview.style.display = 'block';
-    watermarkPlaceholder.style.display = 'none';
-    resetPreview();
-    updateSteps();
-    console.log(`Watermark loaded: ${selectedImage.alt}`);
-  };
+    // Load selected watermark into the preview
+    const selectedWatermarkData = availableWatermarks[index];
 
-  watermarkImage.onerror = () => {
-    console.error(`Failed to load watermark: ${selectedImage.alt}`);
-    showCustomAlert(`Error loading watermark: ${selectedImage.alt}`);
-  };
+    watermarkImage.onload = () => {
+      watermarkPreview.src = watermarkImage.src;
+      watermarkPreview.style.display = 'block';
+      watermarkPlaceholder.style.display = 'none';
+      resetPreview();
+      updateSteps();
+    };
 
-  watermarkImage.src = selectedImage.src;
-}
+    watermarkImage.onerror = () => {
+      console.error(`Failed to load watermark: ${selectedWatermarkData.name}`);
+      Toast.error('Watermark Error', `Failed to load ${selectedWatermarkData.name}`);
+    };
+
+    watermarkImage.src = selectedWatermarkData.url;
+  }
 
   // -----------------------------------------------------------------
   // Event Listeners
@@ -224,28 +383,23 @@ function selectWatermark(index) {
     // Upload method tabs
     filesTab.addEventListener('click', () => switchUploadMethod('files'));
     urlTab.addEventListener('click', () => switchUploadMethod('url'));
-    
+
     // File upload
     dropZone.addEventListener("dragover", handleDragOver);
     dropZone.addEventListener("dragleave", handleDragLeave);
     dropZone.addEventListener("drop", handleDrop);
     dropZone.addEventListener("click", () => fileInput.click());
     fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
-    
-    // URL upload
+
+    // URL upload - now supports multiple URLs
     addUrlBtn.addEventListener('click', handleUrlAdd);
-    imageUrlInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        handleUrlAdd();
-      }
-    });
 
     // Advanced watermark upload
     document.getElementById("change-watermark").addEventListener("click", () => {
       watermarkUpload.click();
     });
     watermarkUpload.addEventListener("change", handleWatermarkUpload);
-    
+
     // Advanced toggle
     const advancedToggle = document.getElementById("advanced-toggle");
     if (advancedToggle) {
@@ -294,20 +448,20 @@ function selectWatermark(index) {
     // Touch/swipe detection for fullscreen
     let touchStartX = 0;
     let touchEndX = 0;
-    
+
     fullscreenModal.addEventListener('touchstart', (e) => {
       touchStartX = e.changedTouches[0].screenX;
     });
-    
+
     fullscreenModal.addEventListener('touchend', (e) => {
       touchEndX = e.changedTouches[0].screenX;
       handleSwipe();
     });
-    
+
     function handleSwipe() {
       const swipeThreshold = 50;
       const diff = touchStartX - touchEndX;
-      
+
       if (Math.abs(diff) > swipeThreshold) {
         if (diff > 0) {
           navigateFullscreen(1);
@@ -332,16 +486,13 @@ function selectWatermark(index) {
   function toggleAdvancedOptions() {
     const advancedSection = document.getElementById("advanced-watermark-section");
     const advancedToggle = document.getElementById("advanced-toggle");
-    const toggleIcon = advancedToggle.querySelector("i");
-    
+
     if (advancedSection.style.display === "none" || !advancedSection.style.display) {
       advancedSection.style.display = "block";
-      toggleIcon.className = "fas fa-chevron-up";
-      advancedToggle.innerHTML = '<i class="fas fa-chevron-up"></i> Hide Advanced Options';
+      advancedToggle.innerHTML = '<i class="fas fa-chevron-up"></i> Hide Custom Upload';
     } else {
       advancedSection.style.display = "none";
-      toggleIcon.className = "fas fa-chevron-down";
-      advancedToggle.innerHTML = '<i class="fas fa-chevron-down"></i> Show Advanced Options';
+      advancedToggle.innerHTML = '<i class="fas fa-chevron-down"></i> Custom Watermark Upload';
     }
   }
 
@@ -350,12 +501,12 @@ function selectWatermark(index) {
   // -----------------------------------------------------------------
   function switchUploadMethod(method) {
     currentUploadMethod = method;
-    
+
     // Update tab appearance
     document.querySelectorAll('.upload-method-btn').forEach(btn => {
       btn.classList.remove('active');
     });
-    
+
     if (method === 'files') {
       filesTab.classList.add('active');
       filesUpload.style.display = 'block';
@@ -368,38 +519,112 @@ function selectWatermark(index) {
   }
 
   // -----------------------------------------------------------------
-  // File handling
+  // File handling with HEIC support
   // -----------------------------------------------------------------
-  function handleDragOver(e) { 
-    e.preventDefault(); 
-    dropZone.classList.add("hover"); 
+  function handleDragOver(e) {
+    e.preventDefault();
+    dropZone.classList.add("hover");
   }
-  
-  function handleDragLeave(e) { 
-    e.preventDefault(); 
-    dropZone.classList.remove("hover"); 
+
+  function handleDragLeave(e) {
+    e.preventDefault();
+    dropZone.classList.remove("hover");
   }
-  
+
   function handleDrop(e) {
     e.preventDefault();
     dropZone.classList.remove("hover");
     handleFiles(e.dataTransfer.files);
   }
 
-  function handleFiles(fileList) {
+  async function handleFiles(fileList) {
+    if (isProcessingHeic) {
+      Toast.warning('Processing', 'Please wait for current files to finish processing.');
+      return;
+    }
+
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const heicTypes = ['image/heic', 'image/heif'];
     const zipTypes = ['application/zip', 'application/x-zip-compressed'];
-    
-    Array.from(fileList).forEach(file => {
-      if (validTypes.includes(file.type)) {
-        files.push({ file, type: 'file', name: file.name });
+
+    const filesToProcess = Array.from(fileList);
+    const heicFiles = [];
+    const regularFiles = [];
+    const zipFiles = [];
+
+    // Categorize files
+    for (const file of filesToProcess) {
+      if (HeicConverter.isHeicFile(file)) {
+        heicFiles.push(file);
+      } else if (validTypes.includes(file.type)) {
+        regularFiles.push(file);
       } else if (zipTypes.includes(file.type)) {
-        handleZipFile(file);
-      } else if (file.type === 'image/heic') {
-        showCustomAlert('HEIC files are currently experiencing compatibility issues. Please convert to JPG, PNG, or WebP format for best results.');
+        zipFiles.push(file);
       }
-    });
-    
+    }
+
+    // Add regular files immediately
+    for (const file of regularFiles) {
+      files.push({ file, type: 'file', name: file.name, converted: false });
+    }
+
+    // Process ZIP files
+    for (const zipFile of zipFiles) {
+      await handleZipFile(zipFile);
+    }
+
+    // Convert HEIC files if any
+    if (heicFiles.length > 0) {
+      isProcessingHeic = true;
+
+      Toast.info(
+        'Converting HEIC Files',
+        `Converting ${heicFiles.length} HEIC file${heicFiles.length > 1 ? 's' : ''} to JPEG...`,
+        0 // Don't auto-dismiss
+      );
+
+      try {
+        const convertedResults = await HeicConverter.convertMultiple(
+          heicFiles,
+          (current, total, fileName) => {
+            // Progress callback - could update UI if needed
+          }
+        );
+
+        // Add converted files
+        let successCount = 0;
+        for (const result of convertedResults) {
+          if (result.converted) {
+            files.push({
+              file: result.file,
+              type: 'file',
+              name: result.file.name,
+              converted: true,
+              originalName: result.originalName
+            });
+            successCount++;
+          }
+        }
+
+        // Dismiss the processing toast and show success
+        const toasts = document.querySelectorAll('.toast-info');
+        toasts.forEach(t => Toast.dismiss(t));
+
+        if (successCount > 0) {
+          Toast.conversion(
+            'Conversion Complete',
+            `Successfully converted ${successCount} HEIC file${successCount > 1 ? 's' : ''} to JPEG format.`
+          );
+        }
+
+      } catch (error) {
+        console.error('HEIC conversion error:', error);
+        Toast.error('Conversion Error', 'Some HEIC files could not be converted.');
+      }
+
+      isProcessingHeic = false;
+    }
+
     updateFileList();
     updateSteps();
   }
@@ -409,74 +634,129 @@ function selectWatermark(index) {
       const zip = new JSZip();
       const zipContent = await zip.loadAsync(zipFile);
       const validTypes = ['jpg', 'jpeg', 'png', 'webp'];
-      
+      const heicTypes = ['heic', 'heif'];
+
+      const heicFilesInZip = [];
+
       for (const [filename, file] of Object.entries(zipContent.files)) {
         if (!file.dir) {
           const extension = filename.split('.').pop().toLowerCase();
+
           if (validTypes.includes(extension)) {
             const blob = await file.async('blob');
             const fileObj = new File([blob], filename, { type: `image/${extension}` });
-            files.push({ file: fileObj, type: 'zip', name: filename, zipName: zipFile.name });
+            files.push({ file: fileObj, type: 'zip', name: filename, zipName: zipFile.name, converted: false });
+          } else if (heicTypes.includes(extension)) {
+            const blob = await file.async('blob');
+            const fileObj = new File([blob], filename, { type: 'image/heic' });
+            heicFilesInZip.push(fileObj);
           }
         }
       }
-      
+
+      // Convert HEIC files from ZIP
+      if (heicFilesInZip.length > 0) {
+        Toast.info('Converting HEIC from ZIP', `Found ${heicFilesInZip.length} HEIC files in ZIP, converting...`);
+
+        const convertedResults = await HeicConverter.convertMultiple(heicFilesInZip);
+
+        for (const result of convertedResults) {
+          if (result.converted) {
+            files.push({
+              file: result.file,
+              type: 'zip',
+              name: result.file.name,
+              zipName: zipFile.name,
+              converted: true,
+              originalName: result.originalName
+            });
+          }
+        }
+
+        Toast.conversion('ZIP Conversion Complete', `Converted ${heicFilesInZip.length} HEIC files from ${zipFile.name}`);
+      }
+
       updateFileList();
       updateSteps();
     } catch (error) {
-      showCustomAlert('Error processing ZIP file. Please ensure it contains valid image files.');
+      Toast.error('ZIP Error', 'Error processing ZIP file. Please ensure it contains valid image files.');
     }
   }
 
   function handleUrlAdd() {
-    const url = imageUrlInput.value.trim();
-    if (!url) {
-      showCustomAlert('Please enter a valid image URL.');
+    const urlText = imageUrlInput.value.trim();
+    if (!urlText) {
+      Toast.warning('No URLs', 'Please enter at least one image URL.');
       return;
     }
-    
-    try {
-      new URL(url);
-    } catch (e) {
-      showCustomAlert('Please enter a valid URL.');
+
+    // Split by newlines to support multiple URLs
+    const urls = urlText.split('\n')
+      .map(url => url.trim())
+      .filter(url => url.length > 0);
+
+    if (urls.length === 0) {
+      Toast.warning('No URLs', 'Please enter valid image URLs.');
       return;
     }
-    
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
-    const hasImageExtension = imageExtensions.some(ext => 
-      url.toLowerCase().includes(ext)
-    );
-    
-    if (!hasImageExtension) {
-      showCustomAlert('URL should point to an image file (JPG, PNG, WebP).');
-      return;
+
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+    let addedCount = 0;
+    let skippedCount = 0;
+
+    for (const url of urls) {
+      try {
+        new URL(url);
+      } catch (e) {
+        skippedCount++;
+        continue;
+      }
+
+      const hasImageExtension = imageExtensions.some(ext =>
+        url.toLowerCase().includes(ext)
+      );
+
+      if (!hasImageExtension && !url.includes('poecdn.net')) {
+        skippedCount++;
+        continue;
+      }
+
+      files.push({
+        url,
+        type: 'url',
+        name: url.split('/').pop().split('?')[0] || 'image-from-url.jpg',
+        converted: false
+      });
+      addedCount++;
     }
-    
-    files.push({ 
-      url, 
-      type: 'url', 
-      name: url.split('/').pop() || 'image-from-url.jpg' 
-    });
-    
+
     imageUrlInput.value = '';
     updateFileList();
     updateSteps();
+
+    if (addedCount > 0) {
+      Toast.success('URLs Added', `Added ${addedCount} image${addedCount > 1 ? 's' : ''} from URL${addedCount > 1 ? 's' : ''}.`);
+    }
+
+    if (skippedCount > 0) {
+      Toast.warning('Some URLs Skipped', `${skippedCount} URL${skippedCount > 1 ? 's were' : ' was'} invalid or not an image.`);
+    }
   }
 
   function updateFileList() {
     fileCount.textContent = files.length;
     processCount.textContent = files.length;
-    
+
     fileList.innerHTML = '';
-    
+
     files.forEach((item, index) => {
       const fileItem = document.createElement('div');
-      fileItem.className = 'file-item glass-inner fade-in';
-      
+      fileItem.className = `file-item glass-inner fade-in${item.converted ? ' converted' : ''}`;
+
       let iconClass = 'fas fa-image';
       let sourceLabel = '';
       let sizeInfo = '';
-      
+
       if (item.type === 'file') {
         sizeInfo = formatFileSize(item.file.size);
       } else if (item.type === 'zip') {
@@ -488,13 +768,17 @@ function selectWatermark(index) {
         sourceLabel = 'from URL';
         sizeInfo = 'External';
       }
-      
+
+      const convertedBadge = item.converted
+        ? '<span class="converted-badge">Converted from HEIC</span>'
+        : '';
+
       fileItem.innerHTML = `
-        <div class="file-icon">
+        <div class="file-icon${item.converted ? ' converted' : ''}">
           <i class="${iconClass}"></i>
         </div>
         <div class="file-info">
-          <div class="file-name">${item.name}</div>
+          <div class="file-name">${item.name}${convertedBadge}</div>
           <div class="file-size">${sizeInfo} ${sourceLabel}</div>
         </div>
         <button onclick="removeFile(${index})" class="preview-btn glass-btn" title="Remove file" style="color: var(--error);">
@@ -533,14 +817,15 @@ function selectWatermark(index) {
         watermarkPreview.style.display = 'block';
         watermarkPlaceholder.style.display = 'none';
         isCustomWatermark = true;
-        
+
         // Clear gallery selection
         document.querySelectorAll('.gallery-item').forEach(item => {
           item.classList.remove('selected');
         });
-        
+
         resetPreview();
         updateSteps();
+        Toast.success('Custom Watermark', 'Custom watermark uploaded successfully.');
       };
       reader.readAsDataURL(file);
     }
@@ -558,16 +843,22 @@ function selectWatermark(index) {
     const steps = document.querySelectorAll('[data-step]');
     const hasFiles = files.length > 0;
     const hasWatermark = watermarkImage.complete && watermarkImage.naturalWidth > 0;
-    
+
     // Step 1: Upload Images
-    updateStep(steps[0], true);
-    
-    // Step 2: Configure Watermark - Always active since we have defaults
-    updateStep(steps[1], true);
-    
-    // Step 3: Preview & Process
-    updateStep(steps[2], hasFiles && hasWatermark);
-    
+    updateStep(steps[0], hasFiles);
+
+    // Step 2: Configure Watermark
+    updateStep(steps[1], hasWatermark);
+
+    // Step 3: Adjust
+    updateStep(steps[2], hasWatermark);
+
+    // Step 4: Preview
+    updateStep(steps[3], hasFiles && hasWatermark);
+
+    // Step 5: Download
+    updateStep(steps[4], hasFiles && hasWatermark);
+
     // Enable/disable buttons
     processBtn.disabled = !(hasFiles && hasWatermark);
     generatePreviewBtn.disabled = !(hasFiles && hasWatermark);
@@ -586,19 +877,19 @@ function selectWatermark(index) {
   // -----------------------------------------------------------------
   async function generatePreview() {
     if (files.length === 0) {
-      showCustomAlert('Please upload some images first.');
+      Toast.warning('No Images', 'Please upload some images first.');
       return;
     }
-    
+
     if (!watermarkImage.complete || watermarkImage.naturalWidth === 0) {
-      showCustomAlert('Watermark is not loaded. Please wait a moment and try again.');
+      Toast.warning('No Watermark', 'Watermark is not loaded. Please wait and try again.');
       return;
     }
-    
+
     showPreviewLoading();
     processedPreviews = [];
     currentPreviewIndex = 0;
-    
+
     await processPreviewsSequentially(0);
   }
 
@@ -607,54 +898,54 @@ function selectWatermark(index) {
       showPreview();
       return;
     }
-    
+
     const item = files[index];
-    
+
     try {
       let imageData;
-      
+
       if (item.type === 'url') {
         imageData = await loadImageFromUrl(item.url);
       } else {
         imageData = await loadImageFromFile(item.file);
       }
-      
+
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        
+
         canvas.width = img.width;
         canvas.height = img.height;
-        
+
         // Draw original image
         ctx.drawImage(img, 0, 0);
-        
+
         // Add watermark
         if (watermarkImage.complete && watermarkImage.naturalWidth > 0) {
           const watermarkSize = parseFloat(sizeSlider.value) / 100;
           const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
           const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
-          
+
           const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
-          
+
           ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
           ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
           ctx.globalAlpha = 1;
         }
-        
+
         processedPreviews.push({
           canvas: canvas,
           filename: item.name
         });
-        
+
         processPreviewsSequentially(index + 1);
       };
-      
+
       img.src = imageData;
     } catch (error) {
       console.error('Error processing image:', error);
-      showCustomAlert(`Error processing image: ${item.name}`);
+      Toast.error('Preview Error', `Error processing: ${item.name}`);
       processPreviewsSequentially(index + 1);
     }
   }
@@ -688,7 +979,7 @@ function selectWatermark(index) {
   function getWatermarkPosition(imgWidth, imgHeight, wmWidth, wmHeight) {
     const margin = Math.max(20, Math.min(imgWidth, imgHeight) * 0.02);
     const position = positionSelect.value;
-    
+
     switch (position) {
       case 'top-left':
         return { x: margin, y: margin };
@@ -718,29 +1009,29 @@ function selectWatermark(index) {
     previewCanvas.style.display = 'block';
     previewInfo.style.display = 'flex';
     enlargePreviewBtn.style.display = 'inline-flex';
-    
+
     displayPreviewImage();
   }
 
   function displayPreviewImage() {
     if (processedPreviews.length === 0) return;
-    
+
     const preview = processedPreviews[currentPreviewIndex];
     const ctx = previewCanvas.getContext('2d');
-    
+
     const container = previewCanvas.parentElement;
     const maxWidth = container.clientWidth - 40;
-    const maxHeight = 400;
+    const maxHeight = 280;
     const ratio = Math.min(maxWidth / preview.canvas.width, maxHeight / preview.canvas.height);
-    
+
     previewCanvas.width = preview.canvas.width * ratio;
     previewCanvas.height = preview.canvas.height * ratio;
-    
+
     ctx.drawImage(preview.canvas, 0, 0, previewCanvas.width, previewCanvas.height);
-    
+
     previewFileName.textContent = preview.filename;
     previewCounter.textContent = `${currentPreviewIndex + 1} / ${processedPreviews.length}`;
-    
+
     prevImageBtn.disabled = currentPreviewIndex === 0;
     nextImageBtn.disabled = currentPreviewIndex === processedPreviews.length - 1;
   }
@@ -768,7 +1059,7 @@ function selectWatermark(index) {
   // -----------------------------------------------------------------
   function openFullscreenPreview() {
     if (processedPreviews.length === 0) return;
-    
+
     fullscreenModal.classList.add('active');
     displayFullscreenImage();
     document.body.style.overflow = 'hidden';
@@ -781,22 +1072,22 @@ function selectWatermark(index) {
 
   function displayFullscreenImage() {
     if (processedPreviews.length === 0) return;
-    
+
     const preview = processedPreviews[currentPreviewIndex];
     const ctx = fullscreenCanvas.getContext('2d');
-    
+
     const maxWidth = window.innerWidth * 0.9;
     const maxHeight = window.innerHeight * 0.9;
     const ratio = Math.min(maxWidth / preview.canvas.width, maxHeight / preview.canvas.height);
-    
+
     fullscreenCanvas.width = preview.canvas.width * ratio;
     fullscreenCanvas.height = preview.canvas.height * ratio;
-    
+
     ctx.drawImage(preview.canvas, 0, 0, fullscreenCanvas.width, fullscreenCanvas.height);
-    
+
     fullscreenFilename.textContent = preview.filename;
     fullscreenCounter.textContent = `${currentPreviewIndex + 1} / ${processedPreviews.length}`;
-    
+
     fullscreenPrev.disabled = currentPreviewIndex === 0;
     fullscreenNext.disabled = currentPreviewIndex === processedPreviews.length - 1;
   }
@@ -815,100 +1106,102 @@ function selectWatermark(index) {
   // -----------------------------------------------------------------
   async function processImages() {
     if (files.length === 0) {
-      showCustomAlert('Please upload some images first.');
+      Toast.warning('No Images', 'Please upload some images first.');
       return;
     }
-    
+
     if (!watermarkImage.complete || watermarkImage.naturalWidth === 0) {
-      showCustomAlert('Watermark is not loaded. Please wait a moment and try again.');
+      Toast.warning('No Watermark', 'Watermark is not loaded. Please wait and try again.');
       return;
     }
-    
+
     const btnText = processBtn.querySelector('.btn-text');
     const btnLoader = processBtn.querySelector('.btn-loader');
-    
+
     processBtn.disabled = true;
     btnText.style.display = 'none';
     btnLoader.style.display = 'flex';
-    
+
     const zip = new JSZip();
     let processedCount = 0;
-    
+
     for (const item of files) {
       try {
         let imageData;
-        
+
         if (item.type === 'url') {
           imageData = await loadImageFromUrl(item.url);
         } else {
           imageData = await loadImageFromFile(item.file);
         }
-        
+
         const img = new Image();
         await new Promise((resolve, reject) => {
           img.onload = resolve;
           img.onerror = reject;
           img.src = imageData;
         });
-        
+
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        
+
         canvas.width = img.width;
         canvas.height = img.height;
-        
+
         // Draw original image
         ctx.drawImage(img, 0, 0);
-        
+
         // Calculate watermark dimensions and position
         const watermarkSize = parseFloat(sizeSlider.value) / 100;
         const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
         const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
-        
+
         const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
-        
+
         // Apply opacity and draw watermark
         ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
         ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
         ctx.globalAlpha = 1;
-        
+
         // Convert to blob and add to zip
         const blob = await new Promise(resolve => {
-          canvas.toBlob(resolve, 'image/jpeg', 0.9);
+          canvas.toBlob(resolve, 'image/jpeg', 0.92);
         });
-        
+
         const fileName = item.name.replace(/\.[^/.]+$/, '') + '_watermarked_FLR.jpg';
         zip.file(fileName, blob);
-        
+
         processedCount++;
       } catch (error) {
         console.error('Error processing image:', item.name, error);
       }
     }
-    
+
     if (processedCount > 0) {
-      finalizeDownload(zip, btnText, btnLoader);
+      finalizeDownload(zip, btnText, btnLoader, processedCount);
     } else {
       btnText.style.display = 'flex';
       btnLoader.style.display = 'none';
       processBtn.disabled = false;
-      showCustomAlert('No images were successfully processed.');
+      Toast.error('Processing Failed', 'No images were successfully processed.');
     }
   }
 
-  function finalizeDownload(zip, btnText, btnLoader) {
+  function finalizeDownload(zip, btnText, btnLoader, processedCount) {
     zip.generateAsync({ type: 'blob' }).then((content) => {
       const url = URL.createObjectURL(content);
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
       downloadLink.href = url;
       downloadLink.download = `watermarked_images_FLR_${timestamp}.zip`;
-      
+
       btnText.style.display = 'flex';
       btnLoader.style.display = 'none';
       processBtn.disabled = false;
       downloadSection.style.display = 'block';
-      
+
       downloadSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      Toast.success('Processing Complete', `${processedCount} image${processedCount > 1 ? 's' : ''} watermarked and ready for download!`);
     });
   }
 
@@ -931,46 +1224,5 @@ function selectWatermark(index) {
   function toggleTheme() {
     document.body.classList.toggle('dark-mode');
     updateThemeIcon();
-  }
-
-  // -----------------------------------------------------------------
-  // Custom Alert
-  // -----------------------------------------------------------------
-  function showCustomAlert(message) {
-    const alertModal = document.createElement('div');
-    alertModal.className = 'modal active';
-    alertModal.innerHTML = `
-      <div class="modal-content glass-effect">
-        <div class="modal-header">
-          <h3><i class="fas fa-info-circle" style="color: var(--primary); margin-right: 0.5rem;"></i>Notice</h3>
-        </div>
-        <div class="modal-body">
-          <p style="color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.6;">${message}</p>
-          <div style="text-align: right;">
-            <button class="btn btn-primary glass-btn" onclick="this.closest('.modal').remove(); document.body.style.overflow = '';">
-              <i class="fas fa-check"></i>
-              OK
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-    
-    document.body.appendChild(alertModal);
-    document.body.style.overflow = 'hidden';
-    
-    alertModal.addEventListener('click', (e) => {
-      if (e.target === alertModal) {
-        alertModal.remove();
-        document.body.style.overflow = '';
-      }
-    });
-    
-    setTimeout(() => {
-      if (alertModal.parentNode) {
-        alertModal.remove();
-        document.body.style.overflow = '';
-      }
-    }, 10000);
   }
 });
