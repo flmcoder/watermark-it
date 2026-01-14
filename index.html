@@ -35,6 +35,16 @@
   <!-- Toast Container -->
   <div id="toast-container" class="toast-container"></div>
 
+  <!-- Page Processing Overlay (persistent during HEIC/ZIP import) -->
+  <div id="processing-overlay" class="processing-overlay" style="display: none;">
+    <div class="processing-box glass-effect">
+      <div class="processing-spinner">
+        <i class="fas fa-circle-notch fa-spin"></i>
+      </div>
+      <div class="processing-text">Importing... please wait</div>
+    </div>
+  </div>
+
   <!-- Navigation Header -->
   <nav class="navbar glass-effect">
     <div class="nav-container">
@@ -65,8 +75,7 @@
     <div class="hero-content-compact">
       <h2>Professional Property Image Watermarking</h2>
       <p>Upload images, select a watermark, preview, and download.</p>
-      <p>
-      Supports JPG, PNG, WebP, HEIC, and ZIP files.</p>
+      <p>Supports JPG, PNG, WebP, HEIC, and ZIP files.</p>
     </div>
   </section>
 
