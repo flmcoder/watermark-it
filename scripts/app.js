@@ -207,6 +207,7 @@ function selectWatermark(url) {
     // Create new image
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    
     img.onload = () => {
         state.selectedWatermark = img;
         preview.src = url;
@@ -225,7 +226,7 @@ function selectWatermark(url) {
     
     img.onerror = () => {
         console.warn(`Failed to load watermark: ${url}`);
-        showToast('warning', 'Watermark Error', `Could not load watermark: ${wm.name}`);
+        showToast('warning', 'Watermark Error', `Could not load watermark from: ${url}`);
     };
     
     img.src = url;
@@ -768,7 +769,13 @@ function drawWatermarkOnCanvas(ctx, canvas) {
     const watermark = state.selectedWatermark;
     if (!watermark) return;
     
-    const position = $('#position-select')?.value || 'center';
+    // Get the position value and normalize it (handle hyphens, underscores, spaces)
+    const positionSelect = $('#position-select');
+    let position = positionSelect?.value || 'center';
+    
+    // Normalize the position value to match our switch cases
+    position = position.toLowerCase().replace(/[-_\s]/g, '-');
+    
     const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
     const size = parseInt($('#size-slider')?.value || 50) / 100;
     
@@ -1124,13 +1131,15 @@ function drawWatermarkFullSize(ctx, canvas) {
     const watermark = state.selectedWatermark;
     if (!watermark) return;
     
-    const position = $('#position-select')?.value || 'center';
+    // Get the position value and normalize it
+    const positionSelect = $('#position-select');
+    let position = positionSelect?.value || 'center';
+    
+    // Normalize the position value to match our switch cases
+    position = position.toLowerCase().replace(/[-_\s]/g, '-');
+    
     const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
     const size = parseInt($('#size-slider')?.value || 50) / 100;
-    
-    // Calculate watermark dimensions (proportional to output size)
-    const maxSize = Math.min(canvas.width, canvas.height) * size;
-    const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
     
     let wmWidth, wmHeight;
     if (aspectRatio > 1) {
