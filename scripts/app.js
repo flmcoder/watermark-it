@@ -201,9 +201,6 @@ function selectWatermark(url) {
     
     if (!preview || !placeholder) return;
     
-    // Clear previous state
-    state.selectedWatermark = null;
-    
     // Create new image
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -215,8 +212,7 @@ function selectWatermark(url) {
         placeholder.style.display = 'none';
         
         // Regenerate preview if we have uploaded images
-        if (state.uploadedFiles.length > 0 && state.previewGenerated) {
-            // Debounce preview regeneration
+        if (state.uploadedFiles.length > 0) {
             clearTimeout(window.previewTimeout);
             window.previewTimeout = setTimeout(() => {
                 generatePreview();
@@ -765,11 +761,11 @@ async function processPreviewsSequentially() {
     }
 }
 
-function drawWatermarkOnCanvas(ctx, canvas) {
+function drawWatermarkFullSize(ctx, canvas) {
     const watermark = state.selectedWatermark;
     if (!watermark) return;
     
-    // Get the position value and normalize it (handle hyphens, underscores, spaces)
+    // Get the position value and normalize it
     const positionSelect = $('#position-select');
     let position = positionSelect?.value || 'center';
     
@@ -779,7 +775,7 @@ function drawWatermarkOnCanvas(ctx, canvas) {
     const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
     const size = parseInt($('#size-slider')?.value || 50) / 100;
     
-    // Calculate watermark dimensions
+    // FIX: Added missing calculations that were in drawWatermarkOnCanvas
     const maxSize = Math.min(canvas.width, canvas.height) * size;
     const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
     
@@ -795,10 +791,10 @@ function drawWatermarkOnCanvas(ctx, canvas) {
     // Calculate position
     const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
     
-    // Apply opacity and draw
+    // Apply and draw
     ctx.globalAlpha = opacity;
     ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
-    ctx.globalAlpha = 1.0; // Reset to default
+    ctx.globalAlpha = 1.0;
 }
 
 function getWatermarkPosition(canvas, wmWidth, wmHeight, position) {
