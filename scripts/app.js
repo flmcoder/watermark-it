@@ -1,1069 +1,1357 @@
+/**
+ * Watermark-It - Fort Lowell Realty Property Image Watermarking Tool
+ * Enhanced with proper canvas clearing and live preview updates
+ * AD 2025-2026
+ */
+
 // =========================================
-// TOAST NOTIFICATION SYSTEM
+// GLOBAL VARIABLES
 // =========================================
-const Toast = {
-  container: null,
 
-  init() {
-    this.container = document.getElementById('toast-container');
-    if (!this.container) {
-      this.container = document.createElement('div');
-      this.container.id = 'toast-container';
-      this.container.className = 'toast-container';
-      document.body.appendChild(this.container);
-    }
-  },
-
-  show(options) {
-    const {
-      type = 'info',
-      title = '',
-      message = '',
-      duration = 5000,
-      icon = null
-    } = options;
-
-    const icons = {
-      success: 'fas fa-check-circle',
-      warning: 'fas fa-exclamation-triangle',
-      error: 'fas fa-times-circle',
-      info: 'fas fa-info-circle',
-      conversion: 'fas fa-sync-alt'
-    };
-
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.innerHTML = `
-      <i class="toast-icon ${icon || icons[type] || icons.info}"></i>
-      <div class="toast-content">
-        ${title ? `<div class="toast-title">${title}</div>` : ''}
-        <div class="toast-message">${message}</div>
-      </div>
-      <button class="toast-close" aria-label="Close">
-        <i class="fas fa-times"></i>
-      </button>
-    `;
-
-    const closeBtn = toast.querySelector('.toast-close');
-    closeBtn.addEventListener('click', () => this.dismiss(toast));
-
-    this.container.appendChild(toast);
-
-    if (duration > 0) {
-      setTimeout(() => this.dismiss(toast), duration);
-    }
-
-    return toast;
-  },
-
-  dismiss(toast) {
-    if (!toast || !toast.parentNode) return;
-    toast.classList.add('toast-exit');
-    setTimeout(() => {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-    }, 300);
-  },
-
-  success(title, message, duration = 4000) {
-    return this.show({ type: 'success', title, message, duration });
-  },
-  warning(title, message, duration = 5000) {
-    return this.show({ type: 'warning', title, message, duration });
-  },
-  error(title, message, duration = 6000) {
-    return this.show({ type: 'error', title, message, duration });
-  },
-  info(title, message, duration = 4000) {
-    return this.show({ type: 'info', title, message, duration });
-  },
-  conversion(title, message, duration = 5000) {
-    return this.show({ type: 'conversion', title, message, duration, icon: 'fas fa-exchange-alt' });
-  }
+// Configuration
+const CONFIG = {
+    supportedFormats: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+    maxFileSize: 100 * 1024 * 1024, // 100MB
+    previewWidth: 1200,
+    previewHeight: 800,
+    quality: 0.92,
+    watermarkMaxWidth: 200
 };
 
-// =========================================
-// HEIC CONVERSION UTILITIES
-// =========================================
-const HeicConverter = {
-  isHeicFile(file) {
-    const fileName = file.name.toLowerCase();
-    const isHeicExtension = fileName.endsWith('.heic') || fileName.endsWith('.heif');
-    const isHeicType = file.type === 'image/heic' || file.type === 'image/heif';
-    return isHeicExtension || isHeicType;
-  },
-
-  async convert(file) {
-    if (typeof heic2any === 'undefined') {
-      throw new Error('HEIC conversion library not loaded');
-    }
-
-    try {
-      const convertedBlob = await heic2any({
-        blob: file,
-        toType: 'image/jpeg',
-        quality: 0.92
-      });
-
-      const resultBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-      const originalName = file.name.replace(/\.(heic|heif)$/i, '');
-      const newFileName = `${originalName}.jpg`;
-
-      return new File([resultBlob], newFileName, {
-        type: 'image/jpeg',
-        lastModified: Date.now()
-      });
-    } catch (error) {
-      console.error('HEIC conversion error:', error);
-      throw new Error(`Failed to convert ${file.name}: ${error.message}`);
-    }
-  },
-
-  async convertMultiple(files, onProgress) {
-    const results = [];
-    const heicFiles = files.filter(f => this.isHeicFile(f));
-    const nonHeicFiles = files.filter(f => !this.isHeicFile(f));
-
-    for (const file of nonHeicFiles) {
-      results.push({ file, converted: false, originalName: file.name });
-    }
-
-    for (let i = 0; i < heicFiles.length; i++) {
-      const file = heicFiles[i];
-      try {
-        if (onProgress) onProgress(i + 1, heicFiles.length, file.name);
-
-        const convertedFile = await this.convert(file);
-        results.push({
-          file: convertedFile,
-          converted: true,
-          originalName: file.name
-        });
-      } catch (error) {
-        console.error(`Failed to convert ${file.name}:`, error);
-        Toast.error('Conversion Failed', `Could not convert ${file.name}. The file may be corrupted or unsupported.`);
-      }
-    }
-
-    return results;
-  }
+// State Management
+let state = {
+    uploadedFiles: [],
+    processedPreviews: [],
+    currentPreviewIndex: 0,
+    selectedWatermark: null,
+    watermarkList: [],
+    customWatermark: null,
+    isProcessing: false,
+    isDarkMode: false,
+    previewGenerated: false
 };
 
-// =========================================
-// THEME & INITIALIZATION
-// =========================================
-function initializeTheme() {
-  const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  if (isDark) document.body.classList.add('dark-mode');
-
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-    if (event.matches) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-    updateThemeIcon();
-  });
-
-  updateThemeIcon();
-}
-
-function updateThemeIcon() {
-  const themeToggle = document.getElementById('theme-toggle');
-  const icon = themeToggle.querySelector('i');
-  if (document.body.classList.contains('dark-mode')) {
-    icon.className = 'fas fa-sun';
-  } else {
-    icon.className = 'fas fa-moon';
-  }
-}
+// DOM Elements Cache
+let $ = (selector) => document.querySelector(selector);
+let $$ = (selector) => document.querySelectorAll(selector);
 
 // =========================================
-document.addEventListener("DOMContentLoaded", () => {
-  Toast.init();
-  initializeTheme();
+// INITIALIZATION
+// =========================================
 
-  // DOM refs
-  const fileInput = document.getElementById("file-input");
-  const dropZone = document.getElementById("drop-zone");
-  const fileList = document.getElementById("file-list");
-  const fileCount = document.getElementById("file-count");
-  const processCount = document.getElementById("process-count");
-  const watermarkUpload = document.getElementById("watermark-upload");
-  const watermarkPreview = document.getElementById("watermark-preview");
-  const watermarkPlaceholder = document.getElementById("watermark-placeholder");
-  const positionSelect = document.getElementById("position-select");
-  const opacitySlider = document.getElementById("opacity-slider");
-  const sizeSlider = document.getElementById("size-slider");
-  const opacityValue = document.getElementById("opacity-value");
-  const sizeValue = document.getElementById("size-value");
-  const previewCanvas = document.getElementById("preview-canvas");
-  const previewPlaceholder = document.getElementById("preview-placeholder");
-  const previewLoading = document.getElementById("preview-loading");
-  const previewInfo = document.getElementById("preview-info");
-  const previewFileName = document.getElementById("preview-file-name");
-  const previewCounter = document.getElementById("preview-counter");
-  const generatePreviewBtn = document.getElementById("generate-preview");
-  const enlargePreviewBtn = document.getElementById("enlarge-preview");
-  const prevImageBtn = document.getElementById("prev-image");
-  const nextImageBtn = document.getElementById("next-image");
-  const processBtn = document.getElementById("process-btn");
-  const downloadLink = document.getElementById("download-link");
-  const downloadSection = document.getElementById("download-section");
-  const helpModal = document.getElementById("help-modal");
-  const helpBtn = document.getElementById("help-btn");
-  const closeHelp = document.getElementById("close-help");
-  const themeToggle = document.getElementById("theme-toggle");
-  const filesTab = document.getElementById("files-tab");
-  const urlTab = document.getElementById("url-tab");
-  const filesUpload = document.getElementById("files-upload");
-  const urlUpload = document.getElementById("url-upload");
-  const imageUrlInput = document.getElementById("image-url-input");
-  const addUrlBtn = document.getElementById("add-url-btn");
-  const fullscreenModal = document.getElementById("fullscreen-modal");
-  const fullscreenCanvas = document.getElementById("fullscreen-canvas");
-  const fullscreenClose = document.getElementById("fullscreen-close");
-  const fullscreenPrev = document.getElementById("fullscreen-prev");
-  const fullscreenNext = document.getElementById("fullscreen-next");
-  const fullscreenFilename = document.getElementById("fullscreen-filename");
-  const fullscreenCounter = document.getElementById("fullscreen-counter");
-  const watermarkSelect = document.getElementById("watermark-select");
-  const processingOverlay = document.getElementById("processing-overlay");
-  const processingText = processingOverlay ? processingOverlay.querySelector(".processing-text") : null;
-
-  // State
-  let watermarkImage = new Image();
-  let availableWatermarks = [
-    { name: "Rounded (white background) – Default", url: "./assets/rounded.png", default: true },
-    { name: "Logo Watermark", url: "./assets/logo-watermark.png" },
-    { name: "Logo Watermark 2", url: "./assets/logo-watermark2.png" },
-    { name: "Grey Watermark", url: "./assets/grey-watermark.png" },
-    { name: "Flat White Stroke", url: "./assets/Flat-white-stroke-watermark.png" }
-  ];
-  const files = [];
-  let processedPreviews = [];
-  let currentPreviewIndex = 0;
-  let selectedWatermarkIndex = 0;
-  let currentUploadMethod = 'files';
-  let isCustomWatermark = false;
-  let isProcessingHeic = false;
-
-  // Processing helpers
-  let processingToast = null;
-  let overlayCount = 0;
-
-  init();
-
-  function init() {
+document.addEventListener('DOMContentLoaded', () => {
+    initializeApp();
+    loadWatermarks();
     setupEventListeners();
-    loadWatermarkOptions();
-    setDefaultSettings();
-    updateSliderValues();
-    updateSteps();
-  }
+    checkTheme();
+    console.log('Watermark-It initialized successfully');
+});
 
-  function setDefaultSettings() {
-    positionSelect.value = "center";
-    opacitySlider.value = "75";
-    sizeSlider.value = "50";
-  }
-
-  // Overlay & persistent toast
-  function showProcessingOverlay(message = 'Importing... please wait') {
-    overlayCount++;
-    if (processingOverlay) {
-      if (processingText) processingText.textContent = message;
-      processingOverlay.style.display = 'flex';
-    }
-  }
-  function hideProcessingOverlay() {
-    overlayCount = Math.max(0, overlayCount - 1);
-    if (overlayCount === 0 && processingOverlay) {
-      processingOverlay.style.display = 'none';
-    }
-  }
-  function showProcessingToast(message = 'Importing... please wait') {
-    if (processingToast) {
-      Toast.dismiss(processingToast);
-      processingToast = null;
-    }
-    processingToast = Toast.show({
-      type: 'info',
-      title: 'Importing',
-      message,
-      duration: 0,
-      icon: 'fas fa-circle-notch fa-spin'
+function initializeApp() {
+    // Preload sample images for demo if no images are uploaded
+    preloadSampleImages();
+    
+    // Initialize UI state
+    updateFileCount();
+    updateProcessCount();
+    
+    // Setup drag and drop for the entire body
+    document.body.addEventListener('dragover', handleDragOver);
+    document.body.addEventListener('dragleave', handleDragLeave);
+    document.body.addEventListener('drop', handleDrop);
+    
+    // Close modals on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeFullscreen();
+            closeHelpModal();
+        }
     });
-  }
-  function hideProcessingToast() {
-    if (processingToast) {
-      Toast.dismiss(processingToast);
-      processingToast = null;
-    }
-  }
-
-  // Watermark dropdown
-  function loadWatermarkOptions() {
-    watermarkSelect.innerHTML = '';
-    availableWatermarks.forEach((watermark, index) => {
-      const opt = document.createElement('option');
-      opt.value = index;
-      opt.textContent = watermark.name;
-      watermarkSelect.appendChild(opt);
-    });
-
-    const defaultIndex = availableWatermarks.findIndex(wm => wm.default) >= 0
-      ? availableWatermarks.findIndex(wm => wm.default)
-      : 0;
-
-    watermarkSelect.value = String(defaultIndex);
-    selectWatermark(defaultIndex);
-  }
-
-  function selectWatermark(index) {
-    selectedWatermarkIndex = index;
-    isCustomWatermark = false;
-
-    const selectedWatermarkData = availableWatermarks[index];
-
-    watermarkImage.onload = () => {
-      watermarkPreview.src = watermarkImage.src;
-      watermarkPreview.style.display = 'block';
-      watermarkPlaceholder.style.display = 'none';
-      resetPreview();
-      updateSteps();
-    };
-    watermarkImage.onerror = () => {
-      console.error(`Failed to load watermark: ${selectedWatermarkData.name}`);
-      Toast.error('Watermark Error', `Failed to load ${selectedWatermarkData.name}`);
-    };
-
-    watermarkImage.src = selectedWatermarkData.url;
-  }
-
-  function setCustomWatermarkLabel(label = 'Custom Upload') {
-    let opt = watermarkSelect.querySelector('option[value="custom"]');
-    if (!opt) {
-      opt = document.createElement('option');
-      opt.value = 'custom';
-      watermarkSelect.appendChild(opt);
-    }
-    opt.textContent = label;
-    watermarkSelect.value = 'custom';
-  }
-
-  // Event listeners
-  function setupEventListeners() {
-    filesTab.addEventListener('click', () => switchUploadMethod('files'));
-    urlTab.addEventListener('click', () => switchUploadMethod('url'));
-
-    dropZone.addEventListener("dragover", handleDragOver);
-    dropZone.addEventListener("dragleave", handleDragLeave);
-    dropZone.addEventListener("drop", handleDrop);
-    dropZone.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
-
-    addUrlBtn.addEventListener('click', handleUrlAdd);
-
-    document.getElementById("change-watermark").addEventListener("click", () => {
-      watermarkUpload.click();
-    });
-    watermarkUpload.addEventListener("change", handleWatermarkUpload);
-
-    watermarkSelect.addEventListener("change", (e) => {
-      const val = e.target.value;
-      if (val === 'custom') return;
-      const idx = parseInt(val, 10);
-      if (!isNaN(idx)) selectWatermark(idx);
-    });
-
-    const advancedToggle = document.getElementById("advanced-toggle");
-    if (advancedToggle) {
-      advancedToggle.addEventListener("click", toggleAdvancedOptions);
-    }
-
-    sizeSlider.addEventListener("input", updateSliderValues);
-    opacitySlider.addEventListener("input", updateSliderValues);
-    positionSelect.addEventListener("change", resetPreview);
-
-    generatePreviewBtn.addEventListener("click", generatePreview);
-    enlargePreviewBtn.addEventListener("click", openFullscreenPreview);
-    prevImageBtn.addEventListener("click", () => navigatePreview(-1));
-    nextImageBtn.addEventListener("click", () => navigatePreview(1));
-    processBtn.addEventListener("click", processImages);
-
-    fullscreenClose.addEventListener("click", closeFullscreenPreview);
-    fullscreenPrev.addEventListener("click", () => navigateFullscreen(-1));
-    fullscreenNext.addEventListener("click", () => navigateFullscreen(1));
-    fullscreenModal.addEventListener("click", (e) => {
-      if (e.target === fullscreenModal) closeFullscreenPreview();
-    });
-
-    document.addEventListener("keydown", (e) => {
-      if (fullscreenModal.classList.contains('active')) {
-        if (e.key === 'Escape') closeFullscreenPreview();
-        if (e.key === 'ArrowLeft') navigateFullscreen(-1);
-        if (e.key === 'ArrowRight') navigateFullscreen(1);
-      } else if (e.key === "Escape") {
-        hideModal(helpModal);
-      }
-    });
-
-    let touchStartX = 0;
-    let touchEndX = 0;
-    fullscreenModal.addEventListener('touchstart', (e) => {
-      touchStartX = e.changedTouches[0].screenX;
-    });
-    fullscreenModal.addEventListener('touchend', (e) => {
-      touchEndX = e.changedTouches[0].screenX;
-      const diff = touchStartX - touchEndX;
-      const swipeThreshold = 50;
-      if (Math.abs(diff) > swipeThreshold) {
-        if (diff > 0) navigateFullscreen(1);
-        else navigateFullscreen(-1);
-      }
-    });
-
-    helpBtn.addEventListener("click", () => showModal(helpModal));
-    closeHelp.addEventListener("click", () => hideModal(helpModal));
-    helpModal.addEventListener("click", (e) => {
-      if (e.target === helpModal) hideModal(helpModal);
-    });
-    themeToggle.addEventListener("click", toggleTheme);
-  }
-
-  // Advanced toggle
-  function toggleAdvancedOptions() {
-    const advancedSection = document.getElementById("advanced-watermark-section");
-    const advancedToggle = document.getElementById("advanced-toggle");
-
-    if (advancedSection.style.display === "none" || !advancedSection.style.display) {
-      advancedSection.style.display = "block";
-      advancedToggle.innerHTML = '<i class="fas fa-chevron-up"></i> Hide Custom Upload';
-    } else {
-      advancedSection.style.display = "none";
-      advancedToggle.innerHTML = '<i class="fas fa-chevron-down"></i> Custom Watermark Upload';
-    }
-  }
-
-  // Upload method switch
-  function switchUploadMethod(method) {
-    currentUploadMethod = method;
-    document.querySelectorAll('.upload-method-btn').forEach(btn => btn.classList.remove('active'));
-
-    if (method === 'files') {
-      filesTab.classList.add('active');
-      filesUpload.style.display = 'block';
-      urlUpload.style.display = 'none';
-    } else {
-      urlTab.classList.add('active');
-      filesUpload.style.display = 'none';
-      urlUpload.style.display = 'block';
-    }
-  }
-
-  // Drag & drop
-  function handleDragOver(e) { e.preventDefault(); dropZone.classList.add("hover"); }
-  function handleDragLeave(e) { e.preventDefault(); dropZone.classList.remove("hover"); }
-  function handleDrop(e) { e.preventDefault(); dropZone.classList.remove("hover"); handleFiles(e.dataTransfer.files); }
-
-  // Files handler with HEIC support and persistent overlay/toast
-  async function handleFiles(fileList) {
-    if (isProcessingHeic) {
-      Toast.warning('Processing', 'Please wait for current files to finish processing.');
-      return;
-    }
-
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    const zipTypes = ['application/zip', 'application/x-zip-compressed'];
-
-    const filesToProcess = Array.from(fileList);
-    const heicFiles = [];
-    const regularFiles = [];
-    const zipFiles = [];
-
-    for (const file of filesToProcess) {
-      if (HeicConverter.isHeicFile(file)) {
-        heicFiles.push(file);
-      } else if (validTypes.includes(file.type)) {
-        regularFiles.push(file);
-      } else if (zipTypes.includes(file.type)) {
-        zipFiles.push(file);
-      }
-    }
-
-    const needsOverlay = heicFiles.length > 0 || zipFiles.length > 0;
-    if (needsOverlay) {
-      showProcessingOverlay('Importing... please wait');
-      showProcessingToast('Importing... please wait');
-    }
-
-    try {
-      for (const file of regularFiles) {
-        files.push({ file, type: 'file', name: file.name, converted: false });
-      }
-
-      for (const zipFile of zipFiles) {
-        await handleZipFile(zipFile);
-      }
-
-      if (heicFiles.length > 0) {
-        isProcessingHeic = true;
-        try {
-          const convertedResults = await HeicConverter.convertMultiple(
-            heicFiles,
-            (current, total, fileName) => {
-              // progress hook if needed
+    
+    // Close modals on overlay click
+    document.querySelectorAll('.modal, .fullscreen-modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeFullscreen();
+                closeHelpModal();
             }
-          );
+        });
+    });
+    
+    console.log('App initialized');
+}
 
-          let successCount = 0;
-          for (const result of convertedResults) {
-            if (result.converted) {
-              files.push({
-                file: result.file,
-                type: 'file',
-                name: result.file.name,
-                converted: true,
-                originalName: result.originalName
-              });
-              successCount++;
-            }
-          }
-
-          if (successCount > 0) {
-            Toast.conversion(
-              'Conversion Complete',
-              `Successfully converted ${successCount} HEIC file${successCount > 1 ? 's' : ''} to JPEG format.`
-            );
-          }
-        } catch (error) {
-          console.error('HEIC conversion error:', error);
-          Toast.error('Conversion Error', 'Some HEIC files could not be converted.');
+function preloadSampleImages() {
+    // Create sample image data for demo purposes
+    const sampleImages = [
+        {
+            name: 'sample-property-1.jpg',
+            url: generateSampleImage(800, 600, '#4a5568', '#2d3748', 'Property Photo 1')
+        },
+        {
+            name: 'sample-property-2.jpg',
+            url: generateSampleImage(800, 600, '#2d3748', '#1a202c', 'Property Photo 2')
+        },
+        {
+            name: 'sample-property-3.jpg',
+            url: generateSampleImage(800, 600, '#553c9a', '#44337a', 'Property Photo 3')
         }
-        isProcessingHeic = false;
-      }
+    ];
+    
+    // Store for demo
+    window.demoImages = sampleImages;
+}
 
-      updateFileList();
-      updateSteps();
-    } finally {
-      if (needsOverlay) {
-        hideProcessingOverlay();
-        hideProcessingToast();
-      }
+function generateSampleImage(width, height, bgColor, textColor, text) {
+    // Create a canvas and return data URL for demo
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    
+    // Background
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Add some pattern
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < width; i += 40) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, height);
+        ctx.stroke();
     }
-  }
+    for (let i = 0; i < height; i += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(width, i);
+        ctx.stroke();
+    }
+    
+    // Text
+    ctx.fillStyle = textColor;
+    ctx.font = 'bold 48px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, width / 2, height / 2);
+    
+    return canvas.toDataURL('image/jpeg', 0.8);
+}
 
-  // ZIP handling (includes HEIC inside ZIP)
-  async function handleZipFile(zipFile) {
+// =========================================
+// WATERMARK LOADING
+// =========================================
+
+async function loadWatermarks() {
     try {
-      const zip = new JSZip();
-      const zipContent = await zip.loadAsync(zipFile);
-      const validTypes = ['jpg', 'jpeg', 'png', 'webp'];
-      const heicTypes = ['heic', 'heif'];
-
-      const heicFilesInZip = [];
-
-      for (const [filename, file] of Object.entries(zipContent.files)) {
-        if (!file.dir) {
-          const extension = filename.split('.').pop().toLowerCase();
-
-          if (validTypes.includes(extension)) {
-            const blob = await file.async('blob');
-            const fileObj = new File([blob], filename, { type: `image/${extension}` });
-            files.push({ file: fileObj, type: 'zip', name: filename, zipName: zipFile.name, converted: false });
-          } else if (heicTypes.includes(extension)) {
-            const blob = await file.async('blob');
-            const fileObj = new File([blob], filename, { type: 'image/heic' });
-            heicFilesInZip.push(fileObj);
-          }
+        const response = await fetch('assets/watermarks.json');
+        if (!response.ok) throw new Error('Failed to load watermarks');
+        
+        const data = await response.json();
+        state.watermarkList = data.watermarks || [];
+        populateWatermarkDropdown();
+        
+        if (state.watermarkList.length > 0) {
+            selectWatermark(state.watermarkList[0].file);
         }
-      }
-
-      if (heicFilesInZip.length > 0) {
-        const convertedResults = await HeicConverter.convertMultiple(heicFilesInZip);
-        for (const result of convertedResults) {
-          if (result.converted) {
-            files.push({
-              file: result.file,
-              type: 'zip',
-              name: result.file.name,
-              zipName: zipFile.name,
-              converted: true,
-              originalName: result.originalName
-            });
-          }
-        }
-        Toast.conversion('ZIP Conversion Complete', `Converted ${heicFilesInZip.length} HEIC files from ${zipFile.name}`);
-      }
-
-      updateFileList();
-      updateSteps();
+        
     } catch (error) {
-      Toast.error('ZIP Error', 'Error processing ZIP file. Please ensure it contains valid image files.');
+        console.warn('Could not load watermarks from JSON, trying directory scan:', error);
+        loadWatermarksFromDirectory();
     }
-  }
+}
 
-  // URL add
-  function handleUrlAdd() {
-    const urlText = imageUrlInput.value.trim();
-    if (!urlText) {
-      Toast.warning('No URLs', 'Please enter at least one image URL.');
-      return;
+async function loadWatermarksFromDirectory() {
+    const defaultWatermarks = [
+        { name: 'Rounded (White)', file: 'assets/watermark-rounded-white.png', default: true },
+        { name: 'Rounded (Black)', file: 'assets/watermark-rounded-black.png' },
+        { name: 'Square (White)', file: 'assets/watermark-square-white.png' },
+        { name: 'Square (Black)', file: 'assets/watermark-square-black.png' },
+        { name: 'Horizontal (White)', file: 'assets/watermark-horizontal-white.png' },
+        { name: 'Horizontal (Black)', file: 'assets/watermark-horizontal-black.png' }
+    ];
+    
+    state.watermarkList = defaultWatermarks;
+    populateWatermarkDropdown();
+    
+    if (state.watermarkList.length > 0) {
+        selectWatermark(state.watermarkList[0].file);
     }
+}
 
-    const urls = urlText.split('\n').map(url => url.trim()).filter(url => url.length > 0);
-    if (urls.length === 0) {
-      Toast.warning('No URLs', 'Please enter valid image URLs.');
-      return;
-    }
-
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
-    let addedCount = 0;
-    let skippedCount = 0;
-
-    for (const url of urls) {
-      try { new URL(url); } catch { skippedCount++; continue; }
-
-      const hasImageExtension = imageExtensions.some(ext => url.toLowerCase().includes(ext));
-      if (!hasImageExtension && !url.includes('poecdn.net')) {
-        skippedCount++;
-        continue;
-      }
-
-      files.push({
-        url,
-        type: 'url',
-        name: url.split('/').pop().split('?')[0] || 'image-from-url.jpg',
-        converted: false
-      });
-      addedCount++;
-    }
-
-    imageUrlInput.value = '';
-    updateFileList();
-    updateSteps();
-
-    if (addedCount > 0) {
-      Toast.success('URLs Added', `Added ${addedCount} image${addedCount > 1 ? 's' : ''} from URL${addedCount > 1 ? 's' : ''}.`);
-    }
-    if (skippedCount > 0) {
-      Toast.warning('Some URLs Skipped', `${skippedCount} URL${skippedCount > 1 ? 's were' : ' was'} invalid or not an image.`);
-    }
-  }
-
-  function updateFileList() {
-    fileCount.textContent = files.length;
-    processCount.textContent = files.length;
-    fileList.innerHTML = '';
-
-    files.forEach((item, index) => {
-      const fileItem = document.createElement('div');
-      fileItem.className = `file-item glass-inner fade-in${item.converted ? ' converted' : ''}`;
-
-      let iconClass = 'fas fa-image';
-      let sourceLabel = '';
-      let sizeInfo = '';
-
-      if (item.type === 'file') {
-        sizeInfo = formatFileSize(item.file.size);
-      } else if (item.type === 'zip') {
-        iconClass = 'fas fa-file-archive';
-        sourceLabel = `from ${item.zipName}`;
-        sizeInfo = formatFileSize(item.file.size);
-      } else if (item.type === 'url') {
-        iconClass = 'fas fa-link';
-        sourceLabel = 'from URL';
-        sizeInfo = 'External';
-      }
-
-      const convertedBadge = item.converted ? '<span class="converted-badge">Converted from HEIC</span>' : '';
-
-      fileItem.innerHTML = `
-        <div class="file-icon${item.converted ? ' converted' : ''}">
-          <i class="${iconClass}"></i>
-        </div>
-        <div class="file-info">
-          <div class="file-name">${item.name}${convertedBadge}</div>
-          <div class="file-size">${sizeInfo} ${sourceLabel}</div>
-        </div>
-        <button onclick="removeFile(${index})" class="preview-btn glass-btn" title="Remove file" style="color: var(--error);">
-          <i class="fas fa-times"></i>
-        </button>
-      `;
-      fileList.appendChild(fileItem);
+function populateWatermarkDropdown() {
+    const select = $('#watermark-select');
+    if (!select) return;
+    
+    select.innerHTML = '';
+    
+    state.watermarkList.forEach((wm, index) => {
+        const option = document.createElement('option');
+        option.value = wm.file;
+        option.textContent = wm.name;
+        if (wm.default) option.selected = true;
+        select.appendChild(option);
     });
-  }
+}
 
-  window.removeFile = function(index) {
-    files.splice(index, 1);
-    updateFileList();
-    updateSteps();
-    resetPreview();
-  };
+function selectWatermark(url) {
+    const preview = $('#watermark-preview');
+    const placeholder = $('#watermark-placeholder');
+    
+    if (!preview || !placeholder) return;
+    
+    // Clear previous state
+    state.selectedWatermark = null;
+    
+    // Create new image
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+        state.selectedWatermark = img;
+        preview.src = url;
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+        
+        // Regenerate preview if we have uploaded images
+        if (state.uploadedFiles.length > 0 && state.previewGenerated) {
+            // Debounce preview regeneration
+            clearTimeout(window.previewTimeout);
+            window.previewTimeout = setTimeout(() => {
+                generatePreview();
+            }, 100);
+        }
+    };
+    
+    img.onerror = () => {
+        console.warn(`Failed to load watermark: ${url}`);
+        showToast('warning', 'Watermark Error', `Could not load watermark: ${wm.name}`);
+    };
+    
+    img.src = url;
+}
 
-  function formatFileSize(bytes) {
+// =========================================
+// EVENT LISTENERS
+// =========================================
+
+function setupEventListeners() {
+    // File input
+    const fileInput = $('#file-input');
+    if (fileInput) {
+        fileInput.addEventListener('change', handleFileSelect);
+    }
+    
+    // Drop zone
+    const dropZone = $('#drop-zone');
+    if (dropZone) {
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', handleDragOver);
+        dropZone.addEventListener('dragleave', handleDragLeave);
+        dropZone.addEventListener('drop', handleDrop);
+    }
+    
+    // Upload tabs
+    $$('.upload-method-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchUploadMethod(btn.dataset.method));
+    });
+    
+    // URL input
+    $('#add-url-btn')?.addEventListener('click', handleUrlAdd);
+    $('#image-url-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.ctrlKey) handleUrlAdd();
+    });
+    
+    // Watermark select
+    $('#watermark-select')?.addEventListener('change', (e) => {
+        if (e.target.value) selectWatermark(e.target.value);
+    });
+    
+    // Settings sliders with live preview
+    $('#opacity-slider')?.addEventListener('input', (e) => {
+        $('#opacity-value').textContent = `${e.target.value}%`;
+        updatePreviewLive();
+    });
+    
+    $('#size-slider')?.addEventListener('input', (e) => {
+        $('#size-value').textContent = `${e.target.value}%`;
+        updatePreviewLive();
+    });
+    
+    // Position select with live preview
+    $('#position-select')?.addEventListener('change', updatePreviewLive);
+    
+    // Preview button
+    $('#generate-preview')?.addEventListener('click', generatePreview);
+    
+    // Navigation buttons
+    $('#prev-image')?.addEventListener('click', () => navigatePreview(-1));
+    $('#next-image')?.addEventListener('click', () => navigatePreview(1));
+    
+    // Fullscreen buttons
+    $('#enlarge-preview')?.addEventListener('click', openFullscreen);
+    $('#fullscreen-close')?.addEventListener('click', closeFullscreen);
+    $('#fullscreen-prev')?.addEventListener('click', () => navigateFullscreen(-1));
+    $('#fullscreen-next')?.addEventListener('click', () => navigateFullscreen(1));
+    
+    // Process button
+    $('#process-btn')?.addEventListener('click', processAllImages);
+    
+    // Advanced toggle
+    $('#advanced-toggle')?.addEventListener('click', toggleAdvancedSection);
+    
+    // Custom watermark upload
+    $('#change-watermark')?.addEventListener('click', () => {
+        $('#watermark-upload')?.click();
+    });
+    
+    $('#watermark-upload')?.addEventListener('change', handleCustomWatermarkUpload);
+    
+    // Help modal
+    $('#help-btn')?.addEventListener('click', openHelpModal);
+    $('#close-help')?.addEventListener('click', closeHelpModal);
+    
+    // Theme toggle
+    $('#theme-toggle')?.addEventListener('click', toggleTheme);
+    
+    // Keyboard navigation for preview
+    document.addEventListener('keydown', handlePreviewKeyboard);
+}
+
+// =========================================
+// FILE HANDLING
+// =========================================
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget?.classList.add('hover');
+}
+
+function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget?.classList.remove('hover');
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget?.classList.remove('hover');
+    
+    const files = Array.from(e.dataTransfer.files);
+    processFiles(files);
+}
+
+function handleFileSelect(e) {
+    const files = Array.from(e.target.files);
+    processFiles(files);
+    e.target.value = ''; // Reset input
+}
+
+async function processFiles(files) {
+    const validFiles = files.filter(file => {
+        if (file.size > CONFIG.maxFileSize) {
+            showToast('warning', 'File Too Large', `${file.name} exceeds ${CONFIG.maxFileSize / 1024 / 1024}MB limit`);
+            return false;
+        }
+        return true;
+    });
+    
+    if (validFiles.length === 0) return;
+    
+    // Show processing overlay for HEIC/ZIP operations
+    const needsProcessing = validFiles.some(f => 
+        f.name.toLowerCase().endsWith('.heic') || f.name.toLowerCase().endsWith('.zip')
+    );
+    
+    if (needsProcessing) {
+        $('#processing-overlay').style.display = 'flex';
+    }
+    
+    try {
+        for (const file of validFiles) {
+            if (file.name.toLowerCase().endsWith('.zip')) {
+                await handleZipFile(file);
+            } else if (file.name.toLowerCase().endsWith('.heic')) {
+                await handleHeicFile(file);
+            } else {
+                await handleRegularFile(file);
+            }
+        }
+        
+        updateFileCount();
+        showToast('success', 'Files Uploaded', `${validFiles.length} file(s) ready for processing`);
+        
+    } catch (error) {
+        console.error('Error processing files:', error);
+        showToast('error', 'Processing Error', 'Some files could not be processed');
+    } finally {
+        $('#processing-overlay').style.display = 'none';
+    }
+}
+
+async function handleZipFile(file) {
+    try {
+        const zip = await JSZip.loadAsync(file);
+        const imageFiles = [];
+        
+        for (const [path, zipEntry] of Object.entries(zip.files)) {
+            if (zipEntry.dir || !isImageFile(path)) continue;
+            
+            const blob = await zipEntry.async('blob');
+            const fileName = path.split('/').pop();
+            const file = new File([blob], fileName, { type: getMimeType(fileName) });
+            imageFiles.push(file);
+        }
+        
+        for (const imgFile of imageFiles) {
+            await handleRegularFile(imgFile, true);
+        }
+        
+        if (imageFiles.length > 0) {
+            showToast('success', 'ZIP Extracted', `${imageFiles.length} images extracted from ${file.name}`);
+        }
+        
+    } catch (error) {
+        console.error('Error processing ZIP:', error);
+        showToast('error', 'ZIP Error', 'Could not extract images from ZIP file');
+    }
+}
+
+async function handleHeicFile(file) {
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const blob = await heic2any({ blob: new Blob([arrayBuffer]), toType: 'image/jpeg', quality: 0.9 });
+        
+        const jpegFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
+        await handleRegularFile(jpegFile, true);
+        
+        showToast('success', 'HEIC Converted', `${file.name} converted to JPEG`);
+        
+    } catch (error) {
+        console.error('HEIC conversion error:', error);
+        showToast('error', 'Conversion Error', `Could not convert ${file.name}`);
+    }
+}
+
+async function handleRegularFile(file, converted = false) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            const img = new Image();
+            
+            img.onload = () => {
+                state.uploadedFiles.push({
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    width: img.width,
+                    height: img.height,
+                    url: e.target.result,
+                    converted: converted
+                });
+                
+                addFileToList({
+                    name: file.name,
+                    size: formatFileSize(file.size),
+                    converted: converted
+                });
+                
+                resolve();
+            };
+            
+            img.onerror = () => {
+                console.error('Failed to load image:', file.name);
+                resolve();
+            };
+            
+            img.src = e.target.result;
+        };
+        
+        reader.onerror = () => {
+            console.error('Failed to read file:', file.name);
+            resolve();
+        };
+        
+        reader.readAsDataURL(file);
+    });
+}
+
+function isImageFile(filename) {
+    return /\.(jpg|jpeg|png|webp|gif|bmp|heic|heif)$/i.test(filename);
+}
+
+function getMimeType(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    const mimeTypes = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'webp': 'image/webp',
+        'gif': 'image/gif',
+        'bmp': 'image/bmp',
+        'heic': 'image/heic',
+        'heif': 'image/heif'
+    };
+    return mimeTypes[ext] || 'image/jpeg';
+}
+
+function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }
+}
 
-  // Watermark upload
-  function handleWatermarkUpload(e) {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        watermarkImage.src = reader.result;
-        watermarkPreview.src = reader.result;
-        watermarkPreview.style.display = 'block';
-        watermarkPlaceholder.style.display = 'none';
-        isCustomWatermark = true;
-
-        setCustomWatermarkLabel('Custom Upload');
-        resetPreview();
-        updateSteps();
-        Toast.success('Custom Watermark', 'Custom watermark uploaded successfully.');
-      };
-      reader.readAsDataURL(file);
+function handleUrlAdd() {
+    const textarea = $('#image-url-input');
+    if (!textarea) return;
+    
+    const urls = textarea.value.trim().split('\n').filter(url => url.trim());
+    
+    if (urls.length === 0) {
+        showToast('warning', 'No URLs', 'Please enter at least one image URL');
+        return;
     }
-  }
-
-  // UI updates
-  function updateSliderValues() {
-    opacityValue.textContent = `${opacitySlider.value}%`;
-    sizeValue.textContent = `${sizeSlider.value}%`;
-  }
-
-  function updateSteps() {
-    const steps = document.querySelectorAll('[data-step]');
-    const hasFiles = files.length > 0;
-    const hasWatermark = watermarkImage.complete && watermarkImage.naturalWidth > 0;
-
-    updateStep(steps[0], hasFiles);
-    updateStep(steps[1], hasWatermark);
-    updateStep(steps[2], hasWatermark);
-    updateStep(steps[3], hasFiles && hasWatermark);
-    updateStep(steps[4], hasFiles && hasWatermark);
-
-    processBtn.disabled = !(hasFiles && hasWatermark);
-    generatePreviewBtn.disabled = !(hasFiles && hasWatermark);
-  }
-
-  function updateStep(stepElement, active) {
-    if (active) stepElement.classList.add('active');
-    else stepElement.classList.remove('active');
-  }
-
-  // Preview
-  async function generatePreview() {
-    if (files.length === 0) {
-      Toast.warning('No Images', 'Please upload some images first.');
-      return;
-    }
-    if (!watermarkImage.complete || watermarkImage.naturalWidth === 0) {
-      Toast.warning('No Watermark', 'Watermark is not loaded. Please wait and try again.');
-      return;
-    }
-
-    showPreviewLoading();
-    processedPreviews = [];
-    currentPreviewIndex = 0;
-
-    await processPreviewsSequentially(0);
-  }
-
-  async function processPreviewsSequentially(index) {
-    if (index >= files.length) {
-      showPreview();
-      return;
-    }
-
-    const item = files[index];
-
-    try {
-      let imageData;
-      if (item.type === 'url') imageData = await loadImageFromUrl(item.url);
-      else imageData = await loadImageFromFile(item.file);
-
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        ctx.drawImage(img, 0, 0);
-
-        if (watermarkImage.complete && watermarkImage.naturalWidth > 0) {
-          const watermarkSize = parseFloat(sizeSlider.value) / 100;
-          const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
-          const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
-
-          const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
-
-          ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
-          ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
-          ctx.globalAlpha = 1;
+    
+    let loadedCount = 0;
+    const totalUrls = urls.length;
+    
+    urls.forEach(url => {
+        const cleanUrl = url.trim();
+        
+        // Validate URL
+        try {
+            new URL(cleanUrl);
+        } catch {
+            console.warn('Invalid URL:', cleanUrl);
+            return;
         }
+        
+        // Fetch and load image
+        fetch(cleanUrl)
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to fetch');
+                return response.blob();
+            })
+            .then(blob => {
+                const fileName = cleanUrl.split('/').pop() || `image-${Date.now()}.jpg`;
+                const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+                return handleRegularFile(file);
+            })
+            .then(() => {
+                loadedCount++;
+                if (loadedCount === totalUrls) {
+                    showToast('success', 'URLs Loaded', `${loadedCount} image(s) loaded from URLs`);
+                    textarea.value = '';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading URL:', cleanUrl, error);
+                loadedCount++;
+            });
+    });
+}
 
-        processedPreviews.push({ canvas, filename: item.name });
-        processPreviewsSequentially(index + 1);
-      };
-      img.src = imageData;
+function switchUploadMethod(method) {
+    $$('.upload-method-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.method === method);
+    });
+    
+    $('#files-upload').style.display = method === 'files' ? 'block' : 'none';
+    $('#url-upload').style.display = method === 'url' ? 'block' : 'none';
+}
+
+// =========================================
+// UI UPDATES
+// =========================================
+
+function addFileToList(file) {
+    const fileList = $('#file-list');
+    if (!fileList) return;
+    
+    const fileItem = document.createElement('div');
+    fileItem.className = `file-item${file.converted ? ' converted' : ''}`;
+    fileItem.innerHTML = `
+        <div class="file-icon${file.converted ? ' converted' : ''}">
+            <i class="fas fa-image"></i>
+        </div>
+        <div class="file-info">
+            <div class="file-name">${escapeHtml(file.name)}${file.converted ? '<span class="converted-badge">Converted</span>' : ''}</div>
+            <div class="file-size">${file.size}</div>
+        </div>
+        <button class="remove-file" onclick="removeFile('${escapeHtml(file.name)}')">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    fileList.appendChild(fileItem);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function removeFile(fileName) {
+    state.uploadedFiles = state.uploadedFiles.filter(f => f.name !== fileName);
+    
+    const fileList = $('#file-list');
+    if (fileList) {
+        const items = fileList.querySelectorAll('.file-item');
+        items.forEach(item => {
+            if (item.querySelector('.file-name').textContent.includes(fileName)) {
+                item.remove();
+            }
+        });
+    }
+    
+    updateFileCount();
+    updateProcessCount();
+    
+    if (state.uploadedFiles.length === 0) {
+        resetPreview();
+    }
+}
+
+function updateFileCount() {
+    const count = state.uploadedFiles.length;
+    $('#file-count').textContent = count;
+    
+    const processBtn = $('#process-btn');
+    if (processBtn) {
+        processBtn.disabled = count === 0;
+    }
+}
+
+function updateProcessCount() {
+    const count = state.uploadedFiles.length;
+    $('#process-count').textContent = count;
+    
+    // Enable/disable process button
+    const processBtn = $('#process-btn');
+    if (processBtn) {
+        processBtn.disabled = count === 0;
+    }
+}
+
+function updateSteps() {
+    const steps = $$('.step');
+    let activeStep = 0;
+    
+    if (state.uploadedFiles.length > 0) activeStep = 1;
+    if (state.selectedWatermark) activeStep = Math.max(activeStep, 2);
+    if (state.previewGenerated) activeStep = Math.max(activeStep, 4);
+    
+    steps.forEach((step, index) => {
+        step.classList.toggle('active', index < activeStep);
+    });
+}
+
+// =========================================
+// PREVIEW GENERATION
+// =========================================
+
+// KEY FIX: Live preview update function that clears canvas properly
+function updatePreviewLive() {
+    // Only update if we have generated a preview and have uploaded files
+    if (!state.previewGenerated || state.uploadedFiles.length === 0) return;
+    
+    // Debounce to avoid excessive redraws
+    clearTimeout(window.livePreviewTimeout);
+    window.livePreviewTimeout = setTimeout(() => {
+        generatePreview();
+    }, 50);
+}
+
+async function generatePreview() {
+    if (state.uploadedFiles.length === 0) {
+        showToast('warning', 'No Images', 'Please upload images first');
+        return;
+    }
+    
+    const canvas = $('#preview-canvas');
+    const placeholder = $('#preview-placeholder');
+    const loading = $('#preview-loading');
+    const previewInfo = $('#preview-info');
+    const enlargeBtn = $('#enlarge-preview');
+    
+    if (!canvas || !placeholder) return;
+    
+    // Show loading state
+    placeholder.style.display = 'none';
+    if (loading) loading.style.display = 'flex';
+    
+    try {
+        // Reset processed previews
+        state.processedPreviews = [];
+        state.currentPreviewIndex = 0;
+        
+        // Process all images
+        await processPreviewsSequentially();
+        
+        // Display first preview
+        displayPreviewImage();
+        
+        // Update UI
+        if (loading) loading.style.display = 'none';
+        canvas.style.display = 'block';
+        if (previewInfo) previewInfo.style.display = 'flex';
+        if (enlargeBtn) enlargeBtn.style.display = 'flex';
+        
+        state.previewGenerated = true;
+        updateSteps();
+        
     } catch (error) {
-      console.error('Error processing image:', error);
-      Toast.error('Preview Error', `Error processing: ${item.name}`);
-      processPreviewsSequentially(index + 1);
+        console.error('Preview generation error:', error);
+        showToast('error', 'Preview Error', 'Could not generate preview');
+        if (loading) loading.style.display = 'none';
+        placeholder.style.display = 'flex';
     }
-  }
+}
 
-  async function loadImageFromUrl(url) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL());
-      };
-      img.onerror = () => reject(new Error('Failed to load image from URL'));
-      img.src = url;
-    });
-  }
-
-  async function loadImageFromFile(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(file);
-    });
-  }
-
-  function getWatermarkPosition(imgWidth, imgHeight, wmWidth, wmHeight) {
-    const margin = Math.max(20, Math.min(imgWidth, imgHeight) * 0.02);
-    const position = positionSelect.value;
-    switch (position) {
-      case 'top-left': return { x: margin, y: margin };
-      case 'top-right': return { x: imgWidth - wmWidth - margin, y: margin };
-      case 'center': return { x: (imgWidth - wmWidth) / 2, y: (imgHeight - wmHeight) / 2 };
-      case 'bottom-left': return { x: margin, y: imgHeight - wmHeight - margin };
-      case 'bottom-right':
-      default: return { x: imgWidth - wmWidth - margin, y: imgHeight - wmHeight - margin };
-    }
-  }
-
-  function showPreviewLoading() {
-    previewPlaceholder.style.display = 'none';
-    previewCanvas.style.display = 'none';
-    previewLoading.style.display = 'block';
-    previewInfo.style.display = 'none';
-    enlargePreviewBtn.style.display = 'none';
-  }
-
-  function showPreview() {
-    previewLoading.style.display = 'none';
-    previewPlaceholder.style.display = 'none';
-    previewCanvas.style.display = 'block';
-    previewInfo.style.display = 'flex';
-    enlargePreviewBtn.style.display = 'inline-flex';
-    displayPreviewImage();
-  }
-
-  function displayPreviewImage() {
-    if (processedPreviews.length === 0) return;
-
-    const preview = processedPreviews[currentPreviewIndex];
-    const ctx = previewCanvas.getContext('2d');
-
-    const container = previewCanvas.parentElement;
-    const maxWidth = container.clientWidth - 40;
-    const maxHeight = 280;
-    const ratio = Math.min(maxWidth / preview.canvas.width, maxHeight / preview.canvas.height);
-
-    previewCanvas.width = preview.canvas.width * ratio;
-    previewCanvas.height = preview.canvas.height * ratio;
-
-    ctx.drawImage(preview.canvas, 0, 0, previewCanvas.width, previewCanvas.height);
-
-    previewFileName.textContent = preview.filename;
-    previewCounter.textContent = `${currentPreviewIndex + 1} / ${processedPreviews.length}`;
-
-    prevImageBtn.disabled = currentPreviewIndex === 0;
-    nextImageBtn.disabled = currentPreviewIndex === processedPreviews.length - 1;
-  }
-
-  function navigatePreview(direction) {
-    const newIndex = currentPreviewIndex + direction;
-    if (newIndex >= 0 && newIndex < processedPreviews.length) {
-      currentPreviewIndex = newIndex;
-      displayPreviewImage();
-    }
-  }
-
-  function resetPreview() {
-    processedPreviews = [];
-    currentPreviewIndex = 0;
-    previewLoading.style.display = 'none';
-    previewCanvas.style.display = 'none';
-    previewInfo.style.display = 'none';
-    enlargePreviewBtn.style.display = 'none';
-    previewPlaceholder.style.display = 'block';
-  }
-
-  // Fullscreen preview
-  function openFullscreenPreview() {
-    if (processedPreviews.length === 0) return;
-    fullscreenModal.classList.add('active');
-    displayFullscreenImage();
-    document.body.style.overflow = 'hidden';
-  }
-  function closeFullscreenPreview() {
-    fullscreenModal.classList.remove('active');
-    document.body.style.overflow = '';
-  }
-  function displayFullscreenImage() {
-    if (processedPreviews.length === 0) return;
-
-    const preview = processedPreviews[currentPreviewIndex];
-    const ctx = fullscreenCanvas.getContext('2d');
-
-    const maxWidth = window.innerWidth * 0.9;
-    const maxHeight = window.innerHeight * 0.9;
-    const ratio = Math.min(maxWidth / preview.canvas.width, maxHeight / preview.canvas.height);
-
-    fullscreenCanvas.width = preview.canvas.width * ratio;
-    fullscreenCanvas.height = preview.canvas.height * ratio;
-
-    ctx.drawImage(preview.canvas, 0, 0, fullscreenCanvas.width, fullscreenCanvas.height);
-
-    fullscreenFilename.textContent = preview.filename;
-    fullscreenCounter.textContent = `${currentPreviewIndex + 1} / ${processedPreviews.length}`;
-
-    fullscreenPrev.disabled = currentPreviewIndex === 0;
-    fullscreenNext.disabled = currentPreviewIndex === processedPreviews.length - 1;
-  }
-  function navigateFullscreen(direction) {
-    const newIndex = currentPreviewIndex + direction;
-    if (newIndex >= 0 && newIndex < processedPreviews.length) {
-      currentPreviewIndex = newIndex;
-      displayFullscreenImage();
-      displayPreviewImage();
-    }
-  }
-
-  // Processing
-  async function processImages() {
-    if (files.length === 0) {
-      Toast.warning('No Images', 'Please upload some images first.');
-      return;
-    }
-    if (!watermarkImage.complete || watermarkImage.naturalWidth === 0) {
-      Toast.warning('No Watermark', 'Watermark is not loaded. Please wait and try again.');
-      return;
-    }
-
-    const btnText = processBtn.querySelector('.btn-text');
-    const btnLoader = processBtn.querySelector('.btn-loader');
-
-    processBtn.disabled = true;
-    btnText.style.display = 'none';
-    btnLoader.style.display = 'flex';
-
-    const zip = new JSZip();
-    let processedCount = 0;
-
-    for (const item of files) {
-      try {
-        let imageData;
-        if (item.type === 'url') imageData = await loadImageFromUrl(item.url);
-        else imageData = await loadImageFromFile(item.file);
-
-        const img = new Image();
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = imageData;
+async function processPreviewsSequentially() {
+    for (let i = 0; i < state.uploadedFiles.length; i++) {
+        const fileData = state.uploadedFiles[i];
+        
+        await new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            img.onload = () => {
+                // Create canvas for this preview
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Calculate dimensions (max 1200px width while maintaining aspect ratio)
+                const maxWidth = CONFIG.previewWidth;
+                const scale = Math.min(1, maxWidth / img.width);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                
+                // KEY FIX: Clear the canvas before drawing - this prevents layering
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw the base image
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                // Draw watermark if selected
+                if (state.selectedWatermark) {
+                    drawWatermarkOnCanvas(ctx, canvas);
+                }
+                
+                // Store the result
+                state.processedPreviews.push({
+                    canvas: canvas,
+                    name: fileData.name,
+                    index: i
+                });
+                
+                resolve();
+            };
+            
+            img.onerror = () => {
+                console.error('Failed to load image:', fileData.name);
+                resolve();
+            };
+            
+            img.src = fileData.url;
         });
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        ctx.drawImage(img, 0, 0);
-
-        const watermarkSize = parseFloat(sizeSlider.value) / 100;
-        const watermarkWidth = Math.min(img.width * watermarkSize, watermarkImage.width);
-        const watermarkHeight = (watermarkWidth / watermarkImage.width) * watermarkImage.height;
-
-        const position = getWatermarkPosition(img.width, img.height, watermarkWidth, watermarkHeight);
-
-        ctx.globalAlpha = parseFloat(opacitySlider.value) / 100;
-        ctx.drawImage(watermarkImage, position.x, position.y, watermarkWidth, watermarkHeight);
-        ctx.globalAlpha = 1;
-
-        const blob = await new Promise(resolve => {
-          canvas.toBlob(resolve, 'image/jpeg', 0.92);
-        });
-
-        const fileName = item.name.replace(/\.[^/.]+$/, '') + '_watermarked_FLR.jpg';
-        zip.file(fileName, blob);
-
-        processedCount++;
-      } catch (error) {
-        console.error('Error processing image:', item.name, error);
-      }
     }
+}
 
-    if (processedCount > 0) {
-      finalizeDownload(zip, btnText, btnLoader, processedCount);
+function drawWatermarkOnCanvas(ctx, canvas) {
+    const watermark = state.selectedWatermark;
+    if (!watermark) return;
+    
+    const position = $('#position-select')?.value || 'center';
+    const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
+    const size = parseInt($('#size-slider')?.value || 50) / 100;
+    
+    // Calculate watermark dimensions
+    const maxSize = Math.min(canvas.width, canvas.height) * size;
+    const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
+    
+    let wmWidth, wmHeight;
+    if (aspectRatio > 1) {
+        wmWidth = maxSize;
+        wmHeight = maxSize / aspectRatio;
     } else {
-      btnText.style.display = 'flex';
-      btnLoader.style.display = 'none';
-      processBtn.disabled = false;
-      Toast.error('Processing Failed', 'No images were successfully processed.');
+        wmHeight = maxSize;
+        wmWidth = maxSize * aspectRatio;
     }
-  }
+    
+    // Calculate position
+    const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
+    
+    // Apply opacity and draw
+    ctx.globalAlpha = opacity;
+    ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
+    ctx.globalAlpha = 1.0; // Reset to default
+}
 
-  function finalizeDownload(zip, btnText, btnLoader, processedCount) {
-    zip.generateAsync({ type: 'blob' }).then((content) => {
-      const url = URL.createObjectURL(content);
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
-      downloadLink.href = url;
-      downloadLink.download = `watermarked_images_FLR_${timestamp}.zip`;
+function getWatermarkPosition(canvas, wmWidth, wmHeight, position) {
+    const padding = 20;
+    let x, y;
+    
+    switch (position) {
+        case 'top-left':
+            x = padding;
+            y = padding;
+            break;
+            
+        case 'top-right':
+            x = canvas.width - wmWidth - padding;
+            y = padding;
+            break;
+            
+        case 'bottom-left':
+            x = padding;
+            y = canvas.height - wmHeight - padding;
+            break;
+            
+        case 'bottom-right':
+            x = canvas.width - wmWidth - padding;
+            y = canvas.height - wmHeight - padding;
+            break;
+            
+        case 'center':
+        default:
+            x = (canvas.width - wmWidth) / 2;
+            y = (canvas.height - wmHeight) / 2;
+            break;
+    }
+    
+    return { x, y };
+}
 
-      btnText.style.display = 'flex';
-      btnLoader.style.display = 'none';
-      processBtn.disabled = false;
-      downloadSection.style.display = 'block';
+function displayPreviewImage() {
+    const canvas = $('#preview-canvas');
+    const previewInfo = $('#preview-info');
+    const fileName = $('#preview-file-name');
+    const counter = $('#preview-counter');
+    
+    if (!canvas || state.processedPreviews.length === 0) return;
+    
+    const currentPreview = state.processedPreviews[state.currentPreviewIndex];
+    
+    // Clear the canvas and draw the current preview
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(currentPreview.canvas, 0, 0);
+    
+    // Update canvas size to match preview
+    canvas.width = currentPreview.canvas.width;
+    canvas.height = currentPreview.canvas.height;
+    
+    // Re-draw after resize
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(currentPreview.canvas, 0, 0);
+    
+    // Update info
+    if (fileName) fileName.textContent = currentPreview.name;
+    if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
+    
+    // Update navigation buttons
+    updatePreviewNavigation();
+    
+    // Update fullscreen info
+    updateFullscreenInfo();
+}
 
-      downloadSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+function updatePreviewNavigation() {
+    const prevBtn = $('#prev-image');
+    const nextBtn = $('#next-image');
+    const counter = $('#preview-counter');
+    
+    if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
+    if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
+    if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
+}
 
-      Toast.success('Processing Complete', `${processedCount} image${processedCount > 1 ? 's' : ''} watermarked and ready for download!`);
-    });
-  }
+function navigatePreview(direction) {
+    const newIndex = state.currentPreviewIndex + direction;
+    
+    if (newIndex >= 0 && newIndex < state.processedPreviews.length) {
+        state.currentPreviewIndex = newIndex;
+        displayPreviewImage();
+    }
+}
 
-  // Modal
-  function showModal(modal) {
+function resetPreview() {
+    const canvas = $('#preview-canvas');
+    const placeholder = $('#preview-placeholder');
+    const loading = $('#preview-loading');
+    const previewInfo = $('#preview-info');
+    const enlargeBtn = $('#enlarge-preview');
+    
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.style.display = 'none';
+    }
+    
+    if (placeholder) placeholder.style.display = 'flex';
+    if (loading) loading.style.display = 'none';
+    if (previewInfo) previewInfo.style.display = 'none';
+    if (enlargeBtn) enlargeBtn.style.display = 'none';
+    
+    state.processedPreviews = [];
+    state.currentPreviewIndex = 0;
+    state.previewGenerated = false;
+    updateSteps();
+}
+
+// =========================================
+// FULLSCREEN PREVIEW
+// =========================================
+
+function openFullscreen() {
+    if (state.processedPreviews.length === 0) return;
+    
+    const modal = $('#fullscreen-modal');
+    if (!modal) return;
+    
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
-  }
-  function hideModal(modal) {
-    modal.classList.remove('active');
-    document.body.style.overflow = '';
-  }
+    
+    displayFullscreenImage();
+}
 
-  // Theme
-  function toggleTheme() {
-    document.body.classList.toggle('dark-mode');
-    updateThemeIcon();
-  }
-});
+function closeFullscreen() {
+    const modal = $('#fullscreen-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+function displayFullscreenImage() {
+    const canvas = $('#fullscreen-canvas');
+    const modal = $('#fullscreen-modal');
+    
+    if (!canvas || !modal || state.processedPreviews.length === 0) return;
+    
+    const currentPreview = state.processedPreviews[state.currentPreviewIndex];
+    
+    // Copy to fullscreen canvas
+    canvas.width = currentPreview.canvas.width;
+    canvas.height = currentPreview.canvas.height;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(currentPreview.canvas, 0, 0);
+    
+    // Fit to container
+    fitCanvasToContainer(canvas);
+    updateFullscreenInfo();
+}
+
+function fitCanvasToContainer(canvas) {
+    const container = $('#fullscreen-modal .fullscreen-content');
+    if (!container) return;
+    
+    const containerRect = container.getBoundingClientRect();
+    const padding = 40;
+    
+    const maxWidth = containerRect.width - padding * 2;
+    const maxHeight = containerRect.height - padding * 2 - 60; // Account for info bar
+    
+    const scale = Math.min(1, maxWidth / canvas.width, maxHeight / canvas.height);
+    
+    canvas.style.width = `${canvas.width * scale}px`;
+    canvas.style.height = `${canvas.height * scale}px`;
+}
+
+function navigateFullscreen(direction) {
+    const newIndex = state.currentPreviewIndex + direction;
+    
+    if (newIndex >= 0 && newIndex < state.processedPreviews.length) {
+        state.currentPreviewIndex = newIndex;
+        displayFullscreenImage();
+    }
+}
+
+function updateFullscreenInfo() {
+    const filename = $('#fullscreen-filename');
+    const counter = $('#fullscreen-counter');
+    const prevBtn = $('#fullscreen-prev');
+    const nextBtn = $('#fullscreen-next');
+    
+    if (state.processedPreviews.length > 0) {
+        const currentPreview = state.processedPreviews[state.currentPreviewIndex];
+        if (filename) filename.textContent = currentPreview.name;
+        if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
+    }
+    
+    if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
+    if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
+}
+
+function handlePreviewKeyboard(e) {
+    const modal = $('#fullscreen-modal');
+    if (!modal?.classList.contains('active')) return;
+    
+    switch (e.key) {
+        case 'ArrowLeft':
+            navigateFullscreen(-1);
+            break;
+        case 'ArrowRight':
+            navigateFullscreen(1);
+            break;
+        case 'Escape':
+            closeFullscreen();
+            break;
+    }
+}
+
+// =========================================
+// IMAGE PROCESSING & DOWNLOAD
+// =========================================
+
+async function processAllImages() {
+    if (state.uploadedFiles.length === 0) {
+        showToast('warning', 'No Images', 'Please upload images first');
+        return;
+    }
+    
+    // Generate preview first if not done
+    if (!state.previewGenerated) {
+        await generatePreview();
+    }
+    
+    const processBtn = $('#process-btn');
+    const btnText = processBtn?.querySelector('.btn-text');
+    const btnLoader = processBtn?.querySelector('.btn-loader');
+    const downloadSection = $('#download-section');
+    const downloadLink = $('#download-link');
+    
+    if (!processBtn) return;
+    
+    // Show processing state
+    state.isProcessing = true;
+    processBtn.disabled = true;
+    if (btnText) btnText.style.visibility = 'hidden';
+    if (btnLoader) btnLoader.style.display = 'flex';
+    if (downloadSection) downloadSection.style.display = 'none';
+    
+    try {
+        const zip = new JSZip();
+        
+        // Process each image
+        for (let i = 0; i < state.uploadedFiles.length; i++) {
+            const fileData = state.uploadedFiles[i];
+            const preview = state.processedPreviews[i];
+            
+            // Create final canvas
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            await new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                
+                img.onload = () => {
+                    // Use original image dimensions for full quality
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // Clear and draw
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Apply watermark if available
+                    if (state.selectedWatermark) {
+                        drawWatermarkFullSize(ctx, canvas);
+                    }
+                    
+                    // Convert to blob
+                    canvas.toBlob((blob) => {
+                        // Generate filename
+                        const originalName = fileData.name.replace(/\.[^/.]+$/, '');
+                        const newName = `${originalName}-watermarked.jpg`;
+                        
+                        zip.file(newName, blob);
+                        resolve();
+                    }, 'image/jpeg', CONFIG.quality);
+                };
+                
+                img.onerror = () => {
+                    console.error('Failed to process:', fileData.name);
+                    resolve();
+                };
+                
+                img.src = fileData.url;
+            });
+        }
+        
+        // Generate ZIP
+        const zipBlob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+        
+        // Create download
+        const url = URL.createObjectURL(zipBlob);
+        if (downloadLink) {
+            downloadLink.href = url;
+            downloadLink.download = `watermarked-images-${Date.now()}.zip`;
+        }
+        
+        // Show download section
+        if (downloadSection) downloadSection.style.display = 'block';
+        
+        showToast('success', 'Processing Complete', `${state.uploadedFiles.length} images processed successfully`);
+        
+    } catch (error) {
+        console.error('Processing error:', error);
+        showToast('error', 'Processing Error', 'Failed to process images');
+    } finally {
+        // Reset button state
+        state.isProcessing = false;
+        processBtn.disabled = false;
+        if (btnText) btnText.style.visibility = 'visible';
+        if (btnLoader) btnLoader.style.display = 'none';
+    }
+}
+
+function drawWatermarkFullSize(ctx, canvas) {
+    const watermark = state.selectedWatermark;
+    if (!watermark) return;
+    
+    const position = $('#position-select')?.value || 'center';
+    const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
+    const size = parseInt($('#size-slider')?.value || 50) / 100;
+    
+    // Calculate watermark dimensions (proportional to output size)
+    const maxSize = Math.min(canvas.width, canvas.height) * size;
+    const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
+    
+    let wmWidth, wmHeight;
+    if (aspectRatio > 1) {
+        wmWidth = maxSize;
+        wmHeight = maxSize / aspectRatio;
+    } else {
+        wmHeight = maxSize;
+        wmWidth = maxSize * aspectRatio;
+    }
+    
+    // Calculate position
+    const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
+    
+    // Apply and draw
+    ctx.globalAlpha = opacity;
+    ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
+    ctx.globalAlpha = 1.0;
+}
+
+// =========================================
+// ADVANCED OPTIONS
+// =========================================
+
+function toggleAdvancedSection() {
+    const section = $('#advanced-watermark-section');
+    const toggle = $('#advanced-toggle');
+    
+    if (!section || !toggle) return;
+    
+    const isHidden = section.style.display === 'none';
+    section.style.display = isHidden ? 'block' : 'none';
+    
+    const icon = toggle.querySelector('.fas');
+    if (icon) {
+        icon.classList.toggle('fa-chevron-down', !isHidden);
+        icon.classList.toggle('fa-chevron-up', isHidden);
+    }
+}
+
+function handleCustomWatermarkUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        showToast('warning', 'Invalid File', 'Please select an image file');
+        return;
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = (event) => {
+        const preview = $('#watermark-preview');
+        const placeholder = $('#watermark-placeholder');
+        
+        if (!preview || !placeholder) return;
+        
+        const img = new Image();
+        img.onload = () => {
+            state.customWatermark = img;
+            state.selectedWatermark = img;
+            
+            preview.src = event.target.result;
+            preview.style.display = 'block';
+            placeholder.style.display = 'none';
+            
+            // Regenerate preview if we have uploaded images
+            if (state.uploadedFiles.length > 0 && state.previewGenerated) {
+                generatePreview();
+            }
+            
+            showToast('success', 'Watermark Uploaded', 'Custom watermark applied successfully');
+        };
+        
+        img.onerror = () => {
+            showToast('error', 'Upload Failed', 'Could not load custom watermark');
+        };
+        
+        img.src = event.target.result;
+    };
+    
+    reader.onerror = () => {
+        showToast('error', 'Read Error', 'Could not read file');
+    };
+    
+    reader.readAsDataURL(file);
+}
+
+// =========================================
+// HELP MODAL
+// =========================================
+
+function openHelpModal() {
+    const modal = $('#help-modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeHelpModal() {
+    const modal = $('#help-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+// =========================================
+// THEME TOGGLE
+// =========================================
+
+function toggleTheme() {
+    state.isDarkMode = !state.isDarkMode;
+    document.body.classList.toggle('dark-mode', state.isDarkMode);
+    
+    const themeBtn = $('#theme-toggle');
+    if (themeBtn) {
+        const icon = themeBtn.querySelector('.fas');
+        if (icon) {
+            icon.classList.toggle('fa-moon', !state.isDarkMode);
+            icon.classList.toggle('fa-sun', state.isDarkMode);
+        }
+    }
+    
+    localStorage.setItem('theme', state.isDarkMode ? 'dark' : 'light');
+}
+
+function checkTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        state.isDarkMode = true;
+        document.body.classList.add('dark-mode');
+        const themeBtn = $('#theme-toggle');
+        if (themeBtn) {
+            const icon = themeBtn.querySelector('.fas');
+            if (icon) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            }
+        }
+    }
+}
+
+// =========================================
+// TOAST NOTIFICATIONS
+// =========================================
+
+function showToast(type, title, message) {
+    const container = $('#toast-container');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    const icons = {
+        success: 'fa-check-circle',
+        warning: 'fa-exclamation-triangle',
+        error: 'fa-times-circle',
+        info: 'fa-info-circle',
+        conversion: 'fa-file-image'
+    };
+    
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i class="fas ${icons[type] || icons.info}"></i>
+        </div>
+        <div class="toast-content">
+            <div class="toast-title">${escapeHtml(title)}</div>
+            <div class="toast-message">${escapeHtml(message)}</div>
+        </div>
+        <button class="toast-close">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Setup close button
+    toast.querySelector('.toast-close')?.addEventListener('click', () => {
+        removeToast(toast);
+    });
+    
+    // Auto remove
+    const timeout = setTimeout(() => removeToast(toast), 5000);
+    toast.dataset.timeout = timeout;
+    
+    // Slide in animation
+    requestAnimationFrame(() => {
+        toast.style.animation = 'toastSlideIn 0.3s ease-out';
+    });
+}
+
+function removeToast(toast) {
+    if (!toast) return;
+    
+    clearTimeout(parseInt(toast.dataset.timeout));
+    toast.style.animation = 'toastSlideOut 0.3s ease-in forwards';
+    
+    toast.addEventListener('animationend', () => {
+        toast.remove();
+    });
+}
+
+// =========================================
+// UTILITY FUNCTIONS
+// =========================================
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Make functions globally accessible
+window.removeFile = removeFile;
+window.openHelpModal = openHelpModal;
+window.closeHelpModal = closeHelpModal;
+window.toggleTheme = toggleTheme;
