@@ -497,18 +497,23 @@ body::before {
   pointer-events: none;
   font-size: 0.9rem;
 }
+
+/* === UPDATED SLIDER STYLES === */
 .slider-wrapper { position: relative; }
 .custom-slider {
-  width: 100%; height: 6px;
+  width: 100%;
+  height: 6px;
   border-radius: var(--radius-sm);
   background: var(--glass-inner);
-  outline: none; cursor: pointer;
+  outline: none;
+  cursor: pointer;
   appearance: none;
   border: 1px solid var(--glass-border);
 }
 .custom-slider::-webkit-slider-thumb {
   appearance: none;
-  width: 20px; height: 20px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--bg-gradient-orange);
   cursor: pointer;
@@ -516,15 +521,18 @@ body::before {
   box-shadow: 0 4px 15px rgba(210, 105, 30, 0.4);
   transition: var(--transition);
 }
-.custom-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.custom-slider::-webkit-slider-thumb:hover { transform: scale(1.1); }
 .custom-slider::-moz-range-thumb {
-  width: 20px; height: 20px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--bg-gradient-orange);
   cursor: pointer;
   border: 3px solid white;
   box-shadow: 0 4px 15px rgba(210, 105, 30, 0.4);
 }
+
+/* ADVANCED WARNING */
 .advanced-warning {
   padding: var(--space-md);
   margin-bottom: var(--space-md);
@@ -585,6 +593,23 @@ body::before {
   min-width: 60px; text-align: center;
   padding: var(--space-xs) var(--space-sm);
   background: var(--glass-inner); border-radius: var(--radius-md);
+}
+
+/* QUICK CONTROLS (desktop) */
+.quick-controls {
+  margin-top: var(--space-md);
+  display: grid;
+  gap: var(--space-sm);
+}
+.quick-controls label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+@media (max-width: 768px) {
+  .quick-controls { display: none; }
 }
 
 /* BUTTONS */
@@ -853,3 +878,25 @@ body::before {
 }
 .processing-spinner i { font-size: 1.5rem; color: var(--accent-light); }
 .processing-text { font-weight: 700; font-size: 1rem; }
+
+/* MLS toggle switch */
+.toggle-wrap { display: flex; align-items: center; }
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 24px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider-round {
+  position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(255,255,255,0.3);
+  transition: .2s; border-radius: 24px; border: 1px solid var(--glass-border);
+}
+.slider-round:before {
+  position: absolute; content: "";
+  height: 18px; width: 18px; left: 3px; bottom: 2.5px;
+  background-color: white; transition: .2s; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.switch input:checked + .slider-round { background: var(--success); }
+.switch input:checked + .slider-round:before { transform: translateX(20px); }
