@@ -1,6 +1,11 @@
 /**
  * Watermark-It - Fort Lowell Realty Property Image Watermarking Tool
- * Updates: ARMLS mode, opacity fix, quick position near preview, default opacity 22%
+ * Updates:
+ * - Per-image placement (click or drag on preview)
+ * - Default size slider to 30%
+ * - Keeps fast/global defaults; per-image overrides supported
+ * - MLS mode: corners only; custom uploads disabled; center disallowed
+ * - Opacity fix with ctx.save()/restore(), default 22%
  */
 
 const CONFIG = {
@@ -8,8 +13,7 @@ const CONFIG = {
   maxFileSize: 100 * 1024 * 1024,
   previewWidth: 1200,
   previewHeight: 800,
-  quality: 0.92,
-  watermarkMaxWidth: 200
+  quality: 0.92
 };
 
 const ARMLS_WATERMARKS = [
@@ -27,11 +31,12 @@ const ARMLS_WATERMARKS = [
   { name: 'To Be Built (wht)', file: 'assets/armls/to-be-built-FINAL-WHITE.png' },
   { name: 'Virtually Staged (blk)', file: 'assets/armls/Virtual Staging Watermark_BLACK.png' },
   { name: 'Virtually Staged (wht)', file: 'assets/armls/Virtual Staging Watermark_WHITE.png' }
-];
+};
 
 let state = {
   uploadedFiles: [],
-  processedPreviews: [],
+  processedPreviews: [], // [{ baseCanvas, name, index }]
+  perImagePlacement: [], // [{type:'preset', value:'top-left'} | {type:'custom', xNorm, yNorm}] aligned by uploadedFiles index
   currentPreviewIndex: 0,
   selectedWatermark: null,
   watermarkList: [],
@@ -54,9 +59,11 @@ function debounce(func, wait) {
     timeout = setTimeout(() => func(...args), wait);
   };
 }
-const requestPreviewGeneration = debounce(() => {
-  startPreviewGeneration();
-}, 120);
+
+// For settings changes that need a redraw (not full regen)
+const requestPreviewRedraw = debounce(() => {
+  if (state.previewGenerated) displayPreviewImage();
+}, 80);
 
 document.addEventListener('DOMContentLoaded', () => {
   initializeApp();
@@ -164,8 +171,7 @@ function populateWatermarkDropdown() {
     if (wm.default) option.selected = true;
     select.appendChild(option);
   });
-  const quick = $('#position-select-quick');
-  syncPositionSelectors(); // ensure sync on reload
+  syncPositionSelectors(); // keep main/quick in sync
 }
 
 function selectWatermark(url) {
@@ -181,9 +187,7 @@ function selectWatermark(url) {
     preview.alt = 'Selected Watermark';
     preview.style.display = 'block';
     placeholder.style.display = 'none';
-    if (state.uploadedFiles.length > 0 && state.previewGenerated) {
-      requestPreviewGeneration();
-    }
+    if (state.previewGenerated) displayPreviewImage();
   };
   img.onerror = () => {
     console.warn(`Failed to load watermark: ${url}`);
@@ -219,19 +223,23 @@ function setupEventListeners() {
 
   $('#opacity-slider')?.addEventListener('input', (e) => {
     $('#opacity-value').textContent = `${e.target.value}%`;
-    if (state.uploadedFiles.length > 0) requestPreviewGeneration();
+    requestPreviewRedraw();
   });
+
   $('#size-slider')?.addEventListener('input', (e) => {
     $('#size-value').textContent = `${e.target.value}%`;
-    if (state.uploadedFiles.length > 0) requestPreviewGeneration();
+    requestPreviewRedraw();
   });
+
   $('#position-select')?.addEventListener('change', () => {
     syncPositionSelectors('main');
-    if (state.uploadedFiles.length > 0) requestPreviewGeneration();
+    enforceCenterRestrictionIfMLS();
+    requestPreviewRedraw();
   });
   $('#position-select-quick')?.addEventListener('change', () => {
     syncPositionSelectors('quick');
-    if (state.uploadedFiles.length > 0) requestPreviewGeneration();
+    enforceCenterRestrictionIfMLS();
+    requestPreviewRedraw();
   });
 
   $('#generate-preview')?.addEventListener('click', startPreviewGeneration);
@@ -257,7 +265,17 @@ function setupEventListeners() {
 
   $('#mls-toggle')?.addEventListener('change', handleMLSToggle);
 
+  $('#reset-position')?.addEventListener('click', resetPositionForCurrentImage);
+
   document.addEventListener('keydown', handlePreviewKeyboard);
+
+  // Drag-to-place on preview canvas
+  const previewCanvas = $('#preview-canvas');
+  if (previewCanvas) {
+    ['mousedown', 'touchstart'].forEach(ev => previewCanvas.addEventListener(ev, handleDragStart, { passive: false }));
+    ['mousemove', 'touchmove'].forEach(ev => previewCanvas.addEventListener(ev, handleDragMove, { passive: false }));
+    ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(ev => previewCanvas.addEventListener(ev, handleDragEnd, { passive: false }));
+  }
 }
 
 function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); e.currentTarget?.classList.add('hover'); }
@@ -296,7 +314,9 @@ async function processFiles(files) {
         await handleRegularFile(file);
       }
     }
+    renderFileList();
     updateFileCount();
+    updateProcessCount();
     showToast('success', 'Files Uploaded', `${validFiles.length} file(s) ready for processing`);
   } catch (error) {
     console.error('Error processing files:', error);
@@ -351,6 +371,7 @@ async function handleZipFile(file) {
       await handleRegularFile(img.file, img.converted);
     }
 
+    renderFileList();
     if (imageFiles.length > 0) {
       showToast('success', 'ZIP Extracted', `${imageFiles.length} image(s) extracted from ${file.name}`);
     } else {
@@ -373,6 +394,7 @@ async function handleHeicFile(file) {
     const blob = await heic2any({ blob: new Blob([arrayBuffer]), toType: 'image/jpeg', quality: 0.9 });
     const jpegFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
     await handleRegularFile(jpegFile, true);
+    renderFileList();
     showToast('success', 'HEIC Converted', `${file.name} converted to JPEG`);
   } catch (error) {
     console.error('HEIC conversion error:', error);
@@ -395,11 +417,7 @@ async function handleRegularFile(file, converted = false) {
           url: e.target.result,
           converted: converted
         });
-        addFileToList({
-          name: file.name,
-          size: formatFileSize(file.size),
-          converted: converted
-        });
+        state.perImagePlacement.push(null); // align placement array
         resolve();
       };
       img.onerror = () => { console.error('Failed to load image:', file.name); resolve(); };
@@ -436,7 +454,7 @@ function handleUrlAdd() {
   const totalUrls = urls.length;
   urls.forEach(url => {
     const cleanUrl = url.trim();
-    try { new URL(cleanUrl); } catch { console.warn('Invalid URL:', cleanUrl); return; }
+    try { new URL(cleanUrl); } catch { console.warn('Invalid URL:', cleanUrl); loadedCount++; return; }
     fetch(cleanUrl)
       .then(response => { if (!response.ok) throw new Error('Failed to fetch'); return response.blob(); })
       .then(blob => {
@@ -447,6 +465,9 @@ function handleUrlAdd() {
       .then(() => {
         loadedCount++;
         if (loadedCount === totalUrls) {
+          renderFileList();
+          updateFileCount();
+          updateProcessCount();
           showToast('success', 'URLs Loaded', `${loadedCount} image(s) loaded from URLs`);
           textarea.value = '';
         }
@@ -461,38 +482,46 @@ function switchUploadMethod(method) {
   $('#url-upload').style.display = method === 'url' ? 'block' : 'none';
 }
 
-function addFileToList(file) {
+function renderFileList() {
   const fileList = $('#file-list');
   if (!fileList) return;
-  const fileItem = document.createElement('div');
-  fileItem.className = `file-item${file.converted ? ' converted' : ''}`;
-  fileItem.innerHTML = `
-    <div class="file-icon${file.converted ? ' converted' : ''}">
-      <i class="fas fa-image"></i>
-    </div>
-    <div class="file-info">
-      <div class="file-name">${escapeHtml(file.name)}${file.converted ? '<span class="converted-badge">Converted</span>' : ''}</div>
-      <div class="file-size">${file.size}</div>
-    </div>
-    <button class="remove-file" onclick="removeFile('${escapeHtml(file.name)}')">
-      <i class="fas fa-times"></i>
-    </button>
-  `;
-  fileList.appendChild(fileItem);
+  fileList.innerHTML = '';
+  state.uploadedFiles.forEach((file, idx) => {
+    const item = document.createElement('div');
+    item.className = `file-item${file.converted ? ' converted' : ''}`;
+    item.innerHTML = `
+      <div class="file-icon${file.converted ? ' converted' : ''}">
+        <i class="fas fa-image"></i>
+      </div>
+      <div class="file-info">
+        <div class="file-name">${escapeHtml(file.name)}${file.converted ? '<span class="converted-badge">Converted</span>' : ''}</div>
+        <div class="file-size">${formatFileSize(file.size)}</div>
+      </div>
+      <button class="remove-file" data-index="${idx}">
+        <i class="fas fa-times"></i>
+      </button>
+    `;
+    item.querySelector('.remove-file').addEventListener('click', () => removeFileByIndex(idx));
+    fileList.appendChild(item);
+  });
 }
 
 function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
 
-function removeFile(fileName) {
-  state.uploadedFiles = state.uploadedFiles.filter(f => f.name !== fileName);
-  const fileList = $('#file-list');
-  if (fileList) {
-    const items = fileList.querySelectorAll('.file-item');
-    items.forEach(item => { if (item.querySelector('.file-name').textContent.includes(fileName)) item.remove(); });
-  }
+function removeFileByIndex(idx) {
+  if (idx < 0 || idx >= state.uploadedFiles.length) return;
+  state.uploadedFiles.splice(idx, 1);
+  state.perImagePlacement.splice(idx, 1);
+  renderFileList();
   updateFileCount();
   updateProcessCount();
-  if (state.uploadedFiles.length === 0) resetPreview();
+  if (state.uploadedFiles.length === 0) {
+    resetPreview();
+  } else {
+    // Re-run preview generation to rebuild base canvases
+    state.previewGenerated = false;
+    startPreviewGeneration();
+  }
 }
 
 function updateFileCount() {
@@ -552,7 +581,6 @@ async function generatePreview(jobId) {
     await processPreviewsSequentially(jobId);
     if (jobId !== previewJobId) return;
 
-    displayPreviewImage();
     if (loading) loading.style.display = 'none';
     canvas.style.display = 'block';
     if (previewInfo) previewInfo.style.display = 'flex';
@@ -560,6 +588,7 @@ async function generatePreview(jobId) {
 
     state.previewGenerated = true;
     updateSteps();
+    displayPreviewImage();
   } catch (error) {
     console.error('Preview generation error:', error);
     showToast('error', 'Preview Error', 'Could not generate preview');
@@ -569,6 +598,7 @@ async function generatePreview(jobId) {
 }
 
 async function processPreviewsSequentially(jobId) {
+  state.processedPreviews = [];
   for (let i = 0; i < state.uploadedFiles.length; i++) {
     const fileData = state.uploadedFiles[i];
     if (jobId !== previewJobId) return;
@@ -577,16 +607,14 @@ async function processPreviewsSequentially(jobId) {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload = () => {
+        const scale = Math.min(1, CONFIG.previewWidth / img.width, CONFIG.previewHeight / img.height);
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const maxWidth = CONFIG.previewWidth;
-        const scale = Math.min(1, maxWidth / img.width);
         canvas.width = img.width * scale;
         canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        if (state.selectedWatermark) drawWatermarkOnCanvas(ctx, canvas);
-        state.processedPreviews.push({ canvas, name: fileData.name, index: i });
+        state.processedPreviews.push({ baseCanvas: canvas, name: fileData.name, index: i });
         resolve();
       };
       img.onerror = () => { console.error('Failed to load image:', fileData.name); resolve(); };
@@ -595,18 +623,12 @@ async function processPreviewsSequentially(jobId) {
   }
 }
 
-function drawWatermarkOnCanvas(ctx, canvas) {
+function getWatermarkSize(canvas) {
   const watermark = state.selectedWatermark;
-  if (!watermark) return;
-
-  let position = ($('#position-select')?.value || 'center').toLowerCase().replace(/[-_\s]/g, '-');
-  if (state.isMLSMode && position === 'center') position = 'bottom-right';
-  const opacity = parseInt($('#opacity-slider')?.value || 22, 10) / 100;
-  const size = parseInt($('#size-slider')?.value || 50, 10) / 100;
-
+  if (!watermark) return { wmWidth: 0, wmHeight: 0 };
+  const size = parseInt($('#size-slider')?.value || 30, 10) / 100;
   const maxSize = Math.min(canvas.width, canvas.height) * size;
   const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
-
   let wmWidth, wmHeight;
   if (aspectRatio > 1) {
     wmWidth = maxSize;
@@ -615,13 +637,42 @@ function drawWatermarkOnCanvas(ctx, canvas) {
     wmHeight = maxSize;
     wmWidth = maxSize * aspectRatio;
   }
+  return { wmWidth, wmHeight };
+}
 
-  const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
+function getPlacementForImage(idx, canvas) {
+  // Returns a placement object
+  const placement = state.perImagePlacement[idx];
+  const base = (selectorValueOrDefault()).toLowerCase().replace(/[-_\s]/g, '-');
 
-  ctx.save();
-  ctx.globalAlpha = opacity;
-  ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
-  ctx.restore();
+  const isMLS = state.isMLSMode;
+  const allowed = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+
+  if (isMLS) {
+    // MLS: enforce corner
+    if (placement && placement.type === 'preset' && allowed.includes(placement.value)) {
+      return placement;
+    }
+    // snap any custom or center to nearest corner
+    return { type: 'preset', value: snapToCorner(base) };
+  }
+
+  if (placement) {
+    return placement;
+  }
+  return { type: 'preset', value: base };
+}
+
+function selectorValueOrDefault() {
+  const main = $('#position-select');
+  return main?.value || 'center';
+}
+
+function snapToCorner(position) {
+  const allowed = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+  if (allowed.includes(position)) return position;
+  // default
+  return 'bottom-right';
 }
 
 function getWatermarkPosition(canvas, wmWidth, wmHeight, position) {
@@ -641,25 +692,77 @@ function getWatermarkPosition(canvas, wmWidth, wmHeight, position) {
   return { x, y };
 }
 
+function drawWatermarkWithPlacement(ctx, canvas, placement) {
+  const watermark = state.selectedWatermark;
+  if (!watermark) return;
+
+  const opacity = parseInt($('#opacity-slider')?.value || 22, 10) / 100;
+  const { wmWidth, wmHeight } = getWatermarkSize(canvas);
+
+  let x, y;
+  if (placement.type === 'preset') {
+    const pos = placement.value;
+    const adjusted = state.isMLSMode && pos === 'center' ? 'bottom-right' : pos;
+    ({ x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, adjusted));
+  } else {
+    // custom normalized
+    x = placement.xNorm * canvas.width;
+    y = placement.yNorm * canvas.height;
+    // clamp
+    x = Math.min(Math.max(0, x), canvas.width - wmWidth);
+    y = Math.min(Math.max(0, y), canvas.height - wmHeight);
+  }
+
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
+  ctx.restore();
+}
+
 function displayPreviewImage() {
   const canvas = $('#preview-canvas');
   const fileName = $('#preview-file-name');
   const counter = $('#preview-counter');
+  const placementBadge = $('#placement-status');
+  const resetBtn = $('#reset-position');
   if (!canvas || state.processedPreviews.length === 0) return;
 
   const currentPreview = state.processedPreviews[state.currentPreviewIndex];
 
-  canvas.width = currentPreview.canvas.width;
-  canvas.height = currentPreview.canvas.height;
+  canvas.width = currentPreview.baseCanvas.width;
+  canvas.height = currentPreview.baseCanvas.height;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(currentPreview.canvas, 0, 0);
+
+  // draw base image
+  ctx.drawImage(currentPreview.baseCanvas, 0, 0);
+
+  // draw watermark with current placement
+  const placement = getPlacementForImage(currentPreview.index, canvas);
+  if (state.selectedWatermark) {
+    drawWatermarkWithPlacement(ctx, canvas, placement);
+  }
 
   if (fileName) fileName.textContent = currentPreview.name;
   if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
 
   updatePreviewNavigation();
   updateFullscreenInfo();
+
+  updatePlacementStatusUI(placementBadge, resetBtn, placement);
+}
+
+function updatePlacementStatusUI(badgeEl, resetBtn, placement) {
+  if (!badgeEl) return;
+  if (placement.type === 'custom') {
+    badgeEl.textContent = 'Custom (per-image)';
+    badgeEl.classList.add('badge-custom');
+    if (resetBtn) resetBtn.style.display = 'inline-flex';
+  } else {
+    badgeEl.textContent = 'Default';
+    badgeEl.classList.remove('badge-custom');
+    if (resetBtn) resetBtn.style.display = 'none';
+  }
 }
 
 function updatePreviewNavigation() {
@@ -717,16 +820,20 @@ function closeFullscreen() {
 
 function displayFullscreenImage() {
   const canvas = $('#fullscreen-canvas');
-  const modal = $('#fullscreen-modal');
-  if (!canvas || !modal || state.processedPreviews.length === 0) return;
+  if (!canvas || state.processedPreviews.length === 0) return;
 
   const currentPreview = state.processedPreviews[state.currentPreviewIndex];
-  canvas.width = currentPreview.canvas.width;
-  canvas.height = currentPreview.canvas.height;
+  canvas.width = currentPreview.baseCanvas.width;
+  canvas.height = currentPreview.baseCanvas.height;
 
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(currentPreview.canvas, 0, 0);
+  ctx.drawImage(currentPreview.baseCanvas, 0, 0);
+
+  const placement = getPlacementForImage(currentPreview.index, canvas);
+  if (state.selectedWatermark) {
+    drawWatermarkWithPlacement(ctx, canvas, placement);
+  }
 
   fitCanvasToContainer(canvas);
   updateFullscreenInfo();
@@ -769,11 +876,12 @@ function updateFullscreenInfo() {
 
 function handlePreviewKeyboard(e) {
   const modal = $('#fullscreen-modal');
-  if (!modal?.classList.contains('active')) return;
-  switch (e.key) {
-    case 'ArrowLeft': navigateFullscreen(-1); break;
-    case 'ArrowRight': navigateFullscreen(1); break;
-    case 'Escape': closeFullscreen(); break;
+  if (modal?.classList.contains('active')) {
+    switch (e.key) {
+      case 'ArrowLeft': navigateFullscreen(-1); break;
+      case 'ArrowRight': navigateFullscreen(1); break;
+      case 'Escape': closeFullscreen(); break;
+    }
   }
 }
 
@@ -813,7 +921,12 @@ async function processAllImages() {
           canvas.height = img.height;
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0);
-          if (state.selectedWatermark) drawWatermarkFullSize(ctx, canvas);
+
+          if (state.selectedWatermark) {
+            const placement = getPlacementForImage(i, canvas);
+            drawWatermarkFullSize(ctx, canvas, placement);
+          }
+
           canvas.toBlob((blob) => {
             const originalName = fileData.name.replace(/\.[^/.]+$/, '');
             const newName = `${originalName}-watermarked.jpg`;
@@ -844,28 +957,25 @@ async function processAllImages() {
   }
 }
 
-function drawWatermarkFullSize(ctx, canvas) {
+function drawWatermarkFullSize(ctx, canvas, placement) {
   const watermark = state.selectedWatermark;
   if (!watermark) return;
 
-  let position = ($('#position-select')?.value || 'center').toLowerCase().replace(/[-_\s]/g, '-');
-  if (state.isMLSMode && position === 'center') position = 'bottom-right';
   const opacity = parseInt($('#opacity-slider')?.value || 22, 10) / 100;
-  const size = parseInt($('#size-slider')?.value || 50, 10) / 100;
+  const { wmWidth, wmHeight } = getWatermarkSize(canvas);
 
-  const maxSize = Math.min(canvas.width, canvas.height) * size;
-  const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
-
-  let wmWidth, wmHeight;
-  if (aspectRatio > 1) {
-    wmWidth = maxSize;
-    wmHeight = maxSize / aspectRatio;
+  let x, y;
+  if (placement.type === 'preset') {
+    const pos = placement.value;
+    const adjusted = state.isMLSMode && pos === 'center' ? 'bottom-right' : pos;
+    ({ x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, adjusted));
   } else {
-    wmHeight = maxSize;
-    wmWidth = maxSize * aspectRatio;
+    x = placement.xNorm * canvas.width;
+    y = placement.yNorm * canvas.height;
+    x = Math.min(Math.max(0, x), canvas.width - wmWidth);
+    y = Math.min(Math.max(0, y), canvas.height - wmHeight);
   }
 
-  const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
   ctx.save();
   ctx.globalAlpha = opacity;
   ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
@@ -909,7 +1019,7 @@ function handleCustomWatermarkUpload(e) {
       preview.src = event.target.result;
       preview.style.display = 'block';
       placeholder.style.display = 'none';
-      if (state.uploadedFiles.length > 0) requestPreviewGeneration();
+      if (state.previewGenerated) displayPreviewImage();
       showToast('success', 'Watermark Uploaded', 'Custom watermark applied successfully');
     };
     img.onerror = () => showToast('error', 'Upload Failed', 'Could not load custom watermark');
@@ -925,25 +1035,41 @@ function handleMLSToggle(e) {
   const advSection = $('#advanced-watermark-section');
 
   if (state.isMLSMode) {
-    // apply ARMLS list
     state.watermarkList = [...ARMLS_WATERMARKS];
     populateWatermarkDropdown();
     selectWatermark(state.watermarkList[0]?.file);
-    // disable custom upload UI
     if (advWrapper) advWrapper.style.display = 'none';
     if (advSection) advSection.style.display = 'none';
-    // enforce non-center
-    forceNonCenterPosition();
+    enforceCenterRestrictionIfMLS();
+    applyMLSPlacementRestrictions();
     showToast('info', 'MLS Mode', 'ARMLS-approved watermarks only. Custom uploads disabled. Center placement is not allowed.');
   } else {
-    // restore base list
     state.watermarkList = [...state.baseWatermarkList];
     populateWatermarkDropdown();
     selectWatermark(state.watermarkList[0]?.file);
     if (advWrapper) advWrapper.style.display = 'block';
   }
-  syncPositionSelectors();
-  if (state.uploadedFiles.length > 0 && state.previewGenerated) requestPreviewGeneration();
+  if (state.previewGenerated) displayPreviewImage();
+}
+
+function enforceCenterRestrictionIfMLS() {
+  if (!state.isMLSMode) return;
+  const fallback = 'bottom-right';
+  const main = $('#position-select');
+  const quick = $('#position-select-quick');
+  if (main && main.value === 'center') main.value = fallback;
+  if (quick && quick.value === 'center') quick.value = fallback;
+}
+
+function applyMLSPlacementRestrictions() {
+  if (!state.isMLSMode) return;
+  const allowed = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+  state.perImagePlacement = state.perImagePlacement.map((p) => {
+    if (!p) return { type: 'preset', value: 'bottom-right' };
+    if (p.type === 'custom') return { type: 'preset', value: 'bottom-right' };
+    if (p.type === 'preset' && !allowed.includes(p.value)) return { type: 'preset', value: 'bottom-right' };
+    return p;
+  });
 }
 
 function forceNonCenterPosition() {
@@ -1036,7 +1162,99 @@ function removeToast(toast) {
   toast.addEventListener('animationend', () => { toast.remove(); });
 }
 
-window.removeFile = removeFile;
+// --- Drag-to-place logic ---
+let dragState = { active: false };
+
+function getPointerPosition(e, canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function handleDragStart(e) {
+  if (!state.previewGenerated || !state.selectedWatermark) return;
+  e.preventDefault();
+  const canvas = $('#preview-canvas');
+  if (!canvas) return;
+  const { x, y } = getPointerPosition(e, canvas);
+  updatePlacementFromPointer(x, y, canvas);
+  dragState.active = true;
+}
+
+function handleDragMove(e) {
+  if (!dragState.active) return;
+  if (!state.previewGenerated || !state.selectedWatermark) return;
+  e.preventDefault();
+  const canvas = $('#preview-canvas');
+  if (!canvas) return;
+  const { x, y } = getPointerPosition(e, canvas);
+  updatePlacementFromPointer(x, y, canvas);
+}
+
+function handleDragEnd(e) {
+  if (dragState.active) {
+    e.preventDefault();
+  }
+  dragState.active = false;
+}
+
+function updatePlacementFromPointer(pointerX, pointerY, canvas) {
+  const idx = state.currentPreviewIndex;
+  const fileIndex = state.processedPreviews[idx]?.index ?? idx;
+  const { wmWidth, wmHeight } = getWatermarkSize(canvas);
+  if (wmWidth === 0 || wmHeight === 0) return;
+
+  // center the watermark on pointer
+  let x = pointerX - wmWidth / 2;
+  let y = pointerY - wmHeight / 2;
+
+  // clamp
+  x = Math.min(Math.max(0, x), canvas.width - wmWidth);
+  y = Math.min(Math.max(0, y), canvas.height - wmHeight);
+
+  if (state.isMLSMode) {
+    // snap to nearest corner
+    const corner = nearestCorner(x, y, canvas, wmWidth, wmHeight);
+    state.perImagePlacement[fileIndex] = { type: 'preset', value: corner };
+  } else {
+    const xNorm = x / canvas.width;
+    const yNorm = y / canvas.height;
+    state.perImagePlacement[fileIndex] = { type: 'custom', xNorm, yNorm };
+  }
+
+  displayPreviewImage();
+}
+
+function nearestCorner(x, y, canvas, w, h) {
+  const corners = {
+    'top-left': { x: 0, y: 0 },
+    'top-right': { x: canvas.width - w, y: 0 },
+    'bottom-left': { x: 0, y: canvas.height - h },
+    'bottom-right': { x: canvas.width - w, y: canvas.height - h }
+  };
+  let best = 'bottom-right';
+  let bestDist = Infinity;
+  Object.entries(corners).forEach(([name, pt]) => {
+    const dx = x - pt.x;
+    const dy = y - pt.y;
+    const dist = dx * dx + dy * dy;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = name;
+    }
+  });
+  return best;
+}
+
+function resetPositionForCurrentImage() {
+  const idx = state.currentPreviewIndex;
+  const fileIndex = state.processedPreviews[idx]?.index ?? idx;
+  state.perImagePlacement[fileIndex] = null;
+  displayPreviewImage();
+}
+
+// Expose for inline handlers (legacy)
 window.openHelpModal = openHelpModal;
 window.closeHelpModal = closeHelpModal;
 window.toggleTheme = toggleTheme;
