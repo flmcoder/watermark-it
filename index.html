@@ -24,7 +24,6 @@
 
   <!-- External Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <!-- HEIC to JPEG Conversion Library -->
   <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
   <!-- Favicon -->
@@ -242,11 +241,11 @@
                 </span>
               </label>
 
-              <!-- Position Setting -->
+              <!-- Position Setting (global default) -->
               <div class="adjustment-row">
                 <label class="adjustment-label" for="position-select">
                   <i class="fas fa-arrows-alt"></i>
-                  Position
+                  Position (default)
                 </label>
                 <div class="select-wrapper">
                   <select id="position-select" class="custom-select glass-inner">
@@ -272,15 +271,15 @@
                 </div>
               </div>
 
-              <!-- Size Setting -->
+              <!-- Size Setting (default now 30%) -->
               <div class="adjustment-row">
                 <label class="adjustment-label">
                   <i class="fas fa-expand-arrows-alt"></i>
                   Size
-                  <span class="setting-value" id="size-value">50%</span>
+                  <span class="setting-value" id="size-value">30%</span>
                 </label>
                 <div class="slider-wrapper">
-                  <input type="range" id="size-slider" class="custom-slider" min="10" max="80" value="50">
+                  <input type="range" id="size-slider" class="custom-slider" min="10" max="80" value="30">
                 </div>
               </div>
             </div>
@@ -346,7 +345,10 @@
             </div>
 
             <div class="preview-info glass-inner" id="preview-info" style="display: none;">
-              <span class="preview-file-name" id="preview-file-name">sample.jpg</span>
+              <div class="preview-file-name-wrap">
+                <span class="preview-file-name" id="preview-file-name">sample.jpg</span>
+                <span class="placement-badge" id="placement-status">Default position</span>
+              </div>
               <div class="preview-navigation" id="preview-navigation">
                 <button class="preview-nav-btn glass-btn" id="prev-image" title="Previous image">
                   <i class="fas fa-chevron-left"></i>
@@ -358,10 +360,17 @@
               </div>
             </div>
 
+            <div class="preview-actions-row">
+              <button class="btn btn-secondary btn-xs glass-btn" id="reset-position" style="display: none;">
+                <i class="fas fa-undo"></i> Use default for this image
+              </button>
+              <span class="drag-hint"><i class="fas fa-hand-pointer"></i> Click or drag on the preview to place watermark per image.</span>
+            </div>
+
             <!-- Quick Position (desktop only) -->
             <div class="quick-controls" id="quick-controls">
               <label for="position-select-quick">
-                <i class="fas fa-location-arrow"></i> Position (quick)
+                <i class="fas fa-location-arrow"></i> Position (quick default)
               </label>
               <select id="position-select-quick" class="custom-select glass-inner">
                 <option value="top-left">Top Left</option>
@@ -378,7 +387,7 @@
         <div class="card glass-effect process-card">
           <div class="card-header">
             <h3>
-              <i class="fas a-download"></i>
+              <i class="fas fa-download"></i>
               <span class="step-label">Step 5:</span> Download
             </h3>
           </div>
@@ -508,7 +517,7 @@
             <div class="help-number">4</div>
             <div class="help-content">
               <h4>Preview</h4>
-              <p>Generate a live preview of all images <b>first</b> to see exactly how your branded images will look. Navigate through all images to verify.</p>
+              <p>Generate a live preview of all images first to see exactly how your images will look. Navigate through all images to verify.</p>
             </div>
           </div>
           <div class="help-step">
@@ -532,8 +541,9 @@
           <ul>
             <li><i class="fas fa-check"></i> HEIC files from iPhones/Android are automatically converted</li>
             <li><i class="fas fa-check"></i> Use high-resolution photos for best results.</li>
-            <li><i class="fas fa-check"></i> 60-75% opacity provides good visibility without overpowering. Centered is standard.</li>
-            <li><i class="fas fa-check"></i> Process multiple photos at once for efficiency. FOR FREE.</li>
+            <li><i class="fas fa-check"></i> 30% opacity provides good visibility without overpowering.</li>
+            <li><i class="fas fa-check"></i> Now offers a drag and drop control for desired location.</li>
+            <li><i class="fas fa-check"></i> Fast watermark all photos or customize each images watermark placement!</li>
           </ul>
         </div>
       </div>
