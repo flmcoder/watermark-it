@@ -1,6 +1,7 @@
 /**
  * Watermark-It - Fort Lowell Realty Property Image Watermarking Tool
  * Fixed: clean re-preview on setting changes, correct watermark assets list, no double logos
+ * Added: robust ZIP handling incl. HEIC->JPEG conversion within ZIPs
  * AD 2025-2026
  */
 
@@ -300,7 +301,7 @@ async function processFiles(files) {
         for (const file of validFiles) {
             if (file.name.toLowerCase().endsWith('.zip')) {
                 await handleZipFile(file);
-            } else if (file.name.toLowerCase().endsWith('.heic')) {
+            } else if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
                 await handleHeicFile(file);
             } else {
                 await handleRegularFile(file);
@@ -316,19 +317,58 @@ async function processFiles(files) {
     }
 }
 
+// --- ZIP handling with HEIC conversion inside ZIPs ---
 async function handleZipFile(file) {
+    if (typeof JSZip === 'undefined') {
+        console.error('JSZip is not loaded');
+        showToast('error', 'ZIP Error', 'JSZip library is missing. Ensure it is loaded in HTML.');
+        return;
+    }
     try {
         const zip = await JSZip.loadAsync(file);
         const imageFiles = [];
+
         for (const [path, zipEntry] of Object.entries(zip.files)) {
-            if (zipEntry.dir || !isImageFile(path)) continue;
-            const blob = await zipEntry.async('blob');
+            if (zipEntry.dir) continue;
+            // Skip macOS metadata and hidden/dotfiles
+            if (path.startsWith('__MACOSX') || path.split('/').some(p => p.startsWith('.') || p === '')) continue;
+            if (!isImageFile(path)) continue;
+
             const fileName = path.split('/').pop();
-            const fileObj = new File([blob], fileName, { type: getMimeType(fileName) });
-            imageFiles.push(fileObj);
+
+            if (isHeic(fileName)) {
+                if (typeof heic2any === 'undefined') {
+                    console.warn('heic2any not available; skipping HEIC in ZIP');
+                    showToast('warning', 'HEIC Skipped', `${fileName} skipped (missing HEIC converter).`);
+                    continue;
+                }
+                const arrayBuffer = await zipEntry.async('arraybuffer');
+                const heicBlob = new Blob([arrayBuffer]);
+                try {
+                    const jpegBlob = await heic2any({ blob: heicBlob, toType: 'image/jpeg', quality: 0.9 });
+                    const jpegName = fileName.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
+                    const jpegFile = new File([jpegBlob], jpegName, { type: 'image/jpeg' });
+                    imageFiles.push({ file: jpegFile, converted: true });
+                } catch (err) {
+                    console.error('HEIC conversion in ZIP failed:', fileName, err);
+                    showToast('error', 'Conversion Error', `Could not convert ${fileName}`);
+                }
+            } else {
+                const blob = await zipEntry.async('blob');
+                const fileObj = new File([blob], fileName, { type: getMimeType(fileName) });
+                imageFiles.push({ file: fileObj, converted: false });
+            }
         }
-        for (const imgFile of imageFiles) await handleRegularFile(imgFile, true);
-        if (imageFiles.length > 0) showToast('success', 'ZIP Extracted', `${imageFiles.length} images extracted from ${file.name}`);
+
+        for (const img of imageFiles) {
+            await handleRegularFile(img.file, img.converted);
+        }
+
+        if (imageFiles.length > 0) {
+            showToast('success', 'ZIP Extracted', `${imageFiles.length} image(s) extracted from ${file.name}`);
+        } else {
+            showToast('warning', 'No Images Found', `No supported images were found in ${file.name}`);
+        }
     } catch (error) {
         console.error('Error processing ZIP:', error);
         showToast('error', 'ZIP Error', 'Could not extract images from ZIP file');
@@ -336,10 +376,15 @@ async function handleZipFile(file) {
 }
 
 async function handleHeicFile(file) {
+    if (typeof heic2any === 'undefined') {
+        console.error('heic2any is not loaded');
+        showToast('error', 'Conversion Error', 'HEIC converter is missing. Ensure heic2any is loaded in HTML.');
+        return;
+    }
     try {
         const arrayBuffer = await file.arrayBuffer();
         const blob = await heic2any({ blob: new Blob([arrayBuffer]), toType: 'image/jpeg', quality: 0.9 });
-        const jpegFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
+        const jpegFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
         await handleRegularFile(jpegFile, true);
         showToast('success', 'HEIC Converted', `${file.name} converted to JPEG`);
     } catch (error) {
@@ -379,6 +424,7 @@ async function handleRegularFile(file, converted = false) {
 }
 
 function isImageFile(filename) { return /\.(jpg|jpeg|png|webp|gif|bmp|heic|heif)$/i.test(filename); }
+function isHeic(filename) { return /\.(heic|heif)$/i.test(filename); }
 function getMimeType(filename) {
     const ext = filename.split('.').pop().toLowerCase();
     const mimeTypes = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', heic: 'image/heic', heif: 'image/heif' };
@@ -581,7 +627,7 @@ function drawWatermarkOnCanvas(ctx, canvas) {
     if (!watermark) return;
 
     let position = ($('#position-select')?.value || 'center').toLowerCase().replace(/[-_\s]/g, '-');
-    const opacity = parseInt($('#opacity-slider')?.value || 22, 5) / 100;
+    const opacity = parseInt($('#opacity-slider')?.value || 75, 10) / 100;
     const size = parseInt($('#size-slider')?.value || 50, 10) / 100;
 
     const maxSize = Math.min(canvas.width, canvas.height) * size;
@@ -837,7 +883,7 @@ function drawWatermarkFullSize(ctx, canvas) {
     if (!watermark) return;
 
     let position = ($('#position-select')?.value || 'center').toLowerCase().replace(/[-_\s]/g, '-');
-    const opacity = parseInt($('#opacity-slider')?.value || 22, 5) / 100;
+    const opacity = parseInt($('#opacity-slider')?.value || 75, 10) / 100;
     const size = parseInt($('#size-slider')?.value || 50, 10) / 100;
 
     const maxSize = Math.min(canvas.width, canvas.height) * size;
@@ -919,7 +965,7 @@ function closeHelpModal() {
 }
 
 // =========================================
-// THEME TOGGLE
+– THEME TOGGLE
 // =========================================
 
 function toggleTheme() {
