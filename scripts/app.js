@@ -1,1366 +1,1190 @@
 /**
- * Watermark-It - Fort Lowell Realty Property Image Watermarking Tool
- * Enhanced with proper canvas clearing and live preview updates
+ * Watermark-It — Fort Lowell Realty Property Image Watermarking Tool
+ * Complete application logic with ARMLS compliance, per-image drag positioning,
+ * live preview, batch processing, and ZIP download.
+ *
  * AD 2025-2026
  */
 
-// =========================================
-// GLOBAL VARIABLES
-// =========================================
-
-// Configuration
-const CONFIG = {
-    supportedFormats: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
-    maxFileSize: 100 * 1024 * 1024, // 100MB
-    previewWidth: 1200,
-    previewHeight: 800,
-    quality: 0.92,
-    watermarkMaxWidth: 200
+// ==========================================================
+// CONFIGURATION
+// ==========================================================
+var CONFIG = {
+  maxFileSize: 100 * 1024 * 1024, // 100 MB
+  previewMaxDim: 1200,
+  quality: 0.92,
+  githubBase: 'https://raw.githubusercontent.com/flmcoder/watermark-it/main/assets/'
 };
 
-// State Management
-let state = {
-    uploadedFiles: [],
-    processedPreviews: [],
-    currentPreviewIndex: 0,
-    selectedWatermark: null,
-    watermarkList: [],
-    customWatermark: null,
-    isProcessing: false,
-    isDarkMode: false,
-    previewGenerated: false
+// ==========================================================
+// WATERMARK CATALOGS
+// ==========================================================
+var STANDARD_WATERMARKS = [
+  { name: 'Reverse Logo (Default)', file: 'reverse-logo.png', isDefault: true },
+  { name: 'Rounded Logo',           file: 'rounded-logo.png' },
+  { name: 'Rounded',                file: 'rounded.png' },
+  { name: 'Logo Watermark',         file: 'logo-watermark.png' },
+  { name: 'Logo Watermark 2',       file: 'logo-watermark2.png' },
+  { name: 'Grey Watermark',         file: 'grey-watermark.png' },
+  { name: 'Flat White Stroke',      file: 'Flat-white-stroke-watermark.png' }
+];
+
+var ARMLS_WATERMARKS = [
+  { name: 'For Rent Only — Black',        file: 'armls/For Rent only-blk.png' },
+  { name: 'For Rent Only — White',        file: 'armls/For Rent only-wht.png' },
+  { name: 'For Sale Only — Black',        file: 'armls/For Sale Only-blk.png' },
+  { name: 'For Sale Only — White',        file: 'armls/For Sale Only-wht.png' },
+  { name: 'For Sale or Rent — Black',     file: 'armls/For Sale or Rent - blk.png' },
+  { name: 'For Sale or Rent — White',     file: 'armls/For Sale or Rent -wht.png' },
+  { name: 'For Sale Not Rent — Black',    file: 'armls/For sale not rent-blk.png' },
+  { name: 'For Sale Not Rent — White',    file: 'armls/For sale not rent-wht.png' },
+  { name: 'Under Construction — Black',   file: 'armls/Under-construction-FINAL-BLACK.png' },
+  { name: 'Under Construction — White',   file: 'armls/Under-construction-FINAL-WHITE.png' },
+  { name: 'Virtual Staging — Black',      file: 'armls/Virtual Staging Watermark_BLACK.png' },
+  { name: 'Virtual Staging — White',      file: 'armls/Virtual Staging Watermark_WHITE.png' },
+  { name: 'To Be Built — Black',          file: 'armls/to-be-built-FINAL-BLACK.png' },
+  { name: 'To Be Built — White',          file: 'armls/to-be-built-FINAL-WHITE.png' }
+];
+
+// ==========================================================
+// STATE
+// ==========================================================
+var state = {
+  uploadedFiles: [],
+  // Each entry: { name, type, size, width, height, url, converted, customPosition: null | {xFrac, yFrac} }
+  processedPreviews: [],
+  // Each entry: { canvas, name, index }
+  currentPreviewIndex: 0,
+  selectedWatermark: null,   // Image element
+  selectedWatermarkUrl: '',
+  isArmlsMode: false,
+  isProcessing: false,
+  previewGenerated: false
 };
 
-// DOM Elements Cache
-let $ = (selector) => document.querySelector(selector);
-let $$ = (selector) => document.querySelectorAll(selector);
+// ==========================================================
+// HELPERS
+// ==========================================================
+var $ = function (sel) { return document.querySelector(sel); };
+var $$ = function (sel) { return document.querySelectorAll(sel); };
 
-// =========================================
-// INITIALIZATION
-// =========================================
-
-document.addEventListener('DOMContentLoaded', () => {
-    initializeApp();
-    loadWatermarks();
-    setupEventListeners();
-    checkTheme();
-    console.log('Watermark-It initialized successfully');
-});
-
-function initializeApp() {
-    // Preload sample images for demo if no images are uploaded
-    preloadSampleImages();
-    
-    // Initialize UI state
-    updateFileCount();
-    updateProcessCount();
-    
-    // Setup drag and drop for the entire body
-    document.body.addEventListener('dragover', handleDragOver);
-    document.body.addEventListener('dragleave', handleDragLeave);
-    document.body.addEventListener('drop', handleDrop);
-    
-    // Close modals on escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeFullscreen();
-            closeHelpModal();
-        }
-    });
-    
-    // Close modals on overlay click
-    document.querySelectorAll('.modal, .fullscreen-modal').forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeFullscreen();
-                closeHelpModal();
-            }
-        });
-    });
-    
-    console.log('App initialized');
-}
-
-function preloadSampleImages() {
-    // Create sample image data for demo purposes
-    const sampleImages = [
-        {
-            name: 'sample-property-1.jpg',
-            url: generateSampleImage(800, 600, '#4a5568', '#2d3748', 'Property Photo 1')
-        },
-        {
-            name: 'sample-property-2.jpg',
-            url: generateSampleImage(800, 600, '#2d3748', '#1a202c', 'Property Photo 2')
-        },
-        {
-            name: 'sample-property-3.jpg',
-            url: generateSampleImage(800, 600, '#553c9a', '#44337a', 'Property Photo 3')
-        }
-    ];
-    
-    // Store for demo
-    window.demoImages = sampleImages;
-}
-
-function generateSampleImage(width, height, bgColor, textColor, text) {
-    // Create a canvas and return data URL for demo
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    
-    // Background
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, width, height);
-    
-    // Add some pattern
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < width; i += 40) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, height);
-        ctx.stroke();
-    }
-    for (let i = 0; i < height; i += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(width, i);
-        ctx.stroke();
-    }
-    
-    // Text
-    ctx.fillStyle = textColor;
-    ctx.font = 'bold 48px Inter, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, width / 2, height / 2);
-    
-    return canvas.toDataURL('image/jpeg', 0.8);
-}
-
-// =========================================
-// WATERMARK LOADING
-// =========================================
-
-async function loadWatermarks() {
-    try {
-        const response = await fetch('assets/watermarks.json');
-        if (!response.ok) throw new Error('Failed to load watermarks');
-        
-        const data = await response.json();
-        state.watermarkList = data.watermarks || [];
-        populateWatermarkDropdown();
-        
-        if (state.watermarkList.length > 0) {
-            selectWatermark(state.watermarkList[0].file);
-        }
-        
-    } catch (error) {
-        console.warn('Could not load watermarks from JSON, trying directory scan:', error);
-        loadWatermarksFromDirectory();
-    }
-}
-
-async function loadWatermarksFromDirectory() {
-    const defaultWatermarks = [
-        { name: 'Rounded (White)', file: 'assets/watermark-rounded-white.png', default: true },
-        { name: 'Rounded (Black)', file: 'assets/watermark-rounded-black.png' },
-        { name: 'Square (White)', file: 'assets/watermark-square-white.png' },
-        { name: 'Square (Black)', file: 'assets/watermark-square-black.png' },
-        { name: 'Horizontal (White)', file: 'assets/watermark-horizontal-white.png' },
-        { name: 'Horizontal (Black)', file: 'assets/watermark-horizontal-black.png' }
-    ];
-    
-    state.watermarkList = defaultWatermarks;
-    populateWatermarkDropdown();
-    
-    if (state.watermarkList.length > 0) {
-        selectWatermark(state.watermarkList[0].file);
-    }
-}
-
-function populateWatermarkDropdown() {
-    const select = $('#watermark-select');
-    if (!select) return;
-    
-    select.innerHTML = '';
-    
-    state.watermarkList.forEach((wm, index) => {
-        const option = document.createElement('option');
-        option.value = wm.file;
-        option.textContent = wm.name;
-        if (wm.default) option.selected = true;
-        select.appendChild(option);
-    });
-}
-
-function selectWatermark(url) {
-    const preview = $('#watermark-preview');
-    const placeholder = $('#watermark-placeholder');
-    
-    if (!preview || !placeholder) return;
-    
-    // Clear previous state
-    state.selectedWatermark = null;
-    
-    // Create new image
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    
-    img.onload = () => {
-        state.selectedWatermark = img;
-        preview.src = url;
-        preview.style.display = 'block';
-        placeholder.style.display = 'none';
-        
-        // Regenerate preview if we have uploaded images
-        if (state.uploadedFiles.length > 0 && state.previewGenerated) {
-            // Debounce preview regeneration
-            clearTimeout(window.previewTimeout);
-            window.previewTimeout = setTimeout(() => {
-                generatePreview();
-            }, 100);
-        }
-    };
-    
-    img.onerror = () => {
-        console.warn(`Failed to load watermark: ${url}`);
-        showToast('warning', 'Watermark Error', `Could not load watermark from: ${url}`);
-    };
-    
-    img.src = url;
-}
-
-// =========================================
-// EVENT LISTENERS
-// =========================================
-
-function setupEventListeners() {
-    // File input
-    const fileInput = $('#file-input');
-    if (fileInput) {
-        fileInput.addEventListener('change', handleFileSelect);
-    }
-    
-    // Drop zone
-    const dropZone = $('#drop-zone');
-    if (dropZone) {
-        dropZone.addEventListener('click', () => fileInput.click());
-        dropZone.addEventListener('dragover', handleDragOver);
-        dropZone.addEventListener('dragleave', handleDragLeave);
-        dropZone.addEventListener('drop', handleDrop);
-    }
-    
-    // Upload tabs
-    $$('.upload-method-btn').forEach(btn => {
-        btn.addEventListener('click', () => switchUploadMethod(btn.dataset.method));
-    });
-    
-    // URL input
-    $('#add-url-btn')?.addEventListener('click', handleUrlAdd);
-    $('#image-url-input')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && e.ctrlKey) handleUrlAdd();
-    });
-    
-    // Watermark select
-    $('#watermark-select')?.addEventListener('change', (e) => {
-        if (e.target.value) selectWatermark(e.target.value);
-    });
-    
-    // Settings sliders with live preview
-    $('#opacity-slider')?.addEventListener('input', (e) => {
-        $('#opacity-value').textContent = `${e.target.value}%`;
-        updatePreviewLive();
-    });
-    
-    $('#size-slider')?.addEventListener('input', (e) => {
-        $('#size-value').textContent = `${e.target.value}%`;
-        updatePreviewLive();
-    });
-    
-    // Position select with live preview
-    $('#position-select')?.addEventListener('change', updatePreviewLive);
-    
-    // Preview button
-    $('#generate-preview')?.addEventListener('click', generatePreview);
-    
-    // Navigation buttons
-    $('#prev-image')?.addEventListener('click', () => navigatePreview(-1));
-    $('#next-image')?.addEventListener('click', () => navigatePreview(1));
-    
-    // Fullscreen buttons
-    $('#enlarge-preview')?.addEventListener('click', openFullscreen);
-    $('#fullscreen-close')?.addEventListener('click', closeFullscreen);
-    $('#fullscreen-prev')?.addEventListener('click', () => navigateFullscreen(-1));
-    $('#fullscreen-next')?.addEventListener('click', () => navigateFullscreen(1));
-    
-    // Process button
-    $('#process-btn')?.addEventListener('click', processAllImages);
-    
-    // Advanced toggle
-    $('#advanced-toggle')?.addEventListener('click', toggleAdvancedSection);
-    
-    // Custom watermark upload
-    $('#change-watermark')?.addEventListener('click', () => {
-        $('#watermark-upload')?.click();
-    });
-    
-    $('#watermark-upload')?.addEventListener('change', handleCustomWatermarkUpload);
-    
-    // Help modal
-    $('#help-btn')?.addEventListener('click', openHelpModal);
-    $('#close-help')?.addEventListener('click', closeHelpModal);
-    
-    // Theme toggle
-    $('#theme-toggle')?.addEventListener('click', toggleTheme);
-    
-    // Keyboard navigation for preview
-    document.addEventListener('keydown', handlePreviewKeyboard);
-}
-
-// =========================================
-// FILE HANDLING
-// =========================================
-
-function handleDragOver(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.currentTarget?.classList.add('hover');
-}
-
-function handleDragLeave(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.currentTarget?.classList.remove('hover');
-}
-
-function handleDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.currentTarget?.classList.remove('hover');
-    
-    const files = Array.from(e.dataTransfer.files);
-    processFiles(files);
-}
-
-function handleFileSelect(e) {
-    const files = Array.from(e.target.files);
-    processFiles(files);
-    e.target.value = ''; // Reset input
-}
-
-async function processFiles(files) {
-    const validFiles = files.filter(file => {
-        if (file.size > CONFIG.maxFileSize) {
-            showToast('warning', 'File Too Large', `${file.name} exceeds ${CONFIG.maxFileSize / 1024 / 1024}MB limit`);
-            return false;
-        }
-        return true;
-    });
-    
-    if (validFiles.length === 0) return;
-    
-    // Show processing overlay for HEIC/ZIP operations
-    const needsProcessing = validFiles.some(f => 
-        f.name.toLowerCase().endsWith('.heic') || f.name.toLowerCase().endsWith('.zip')
-    );
-    
-    if (needsProcessing) {
-        $('#processing-overlay').style.display = 'flex';
-    }
-    
-    try {
-        for (const file of validFiles) {
-            if (file.name.toLowerCase().endsWith('.zip')) {
-                await handleZipFile(file);
-            } else if (file.name.toLowerCase().endsWith('.heic')) {
-                await handleHeicFile(file);
-            } else {
-                await handleRegularFile(file);
-            }
-        }
-        
-        updateFileCount();
-        showToast('success', 'Files Uploaded', `${validFiles.length} file(s) ready for processing`);
-        
-    } catch (error) {
-        console.error('Error processing files:', error);
-        showToast('error', 'Processing Error', 'Some files could not be processed');
-    } finally {
-        $('#processing-overlay').style.display = 'none';
-    }
-}
-
-async function handleZipFile(file) {
-    try {
-        const zip = await JSZip.loadAsync(file);
-        const imageFiles = [];
-        
-        for (const [path, zipEntry] of Object.entries(zip.files)) {
-            if (zipEntry.dir || !isImageFile(path)) continue;
-            
-            const blob = await zipEntry.async('blob');
-            const fileName = path.split('/').pop();
-            const file = new File([blob], fileName, { type: getMimeType(fileName) });
-            imageFiles.push(file);
-        }
-        
-        for (const imgFile of imageFiles) {
-            await handleRegularFile(imgFile, true);
-        }
-        
-        if (imageFiles.length > 0) {
-            showToast('success', 'ZIP Extracted', `${imageFiles.length} images extracted from ${file.name}`);
-        }
-        
-    } catch (error) {
-        console.error('Error processing ZIP:', error);
-        showToast('error', 'ZIP Error', 'Could not extract images from ZIP file');
-    }
-}
-
-async function handleHeicFile(file) {
-    try {
-        const arrayBuffer = await file.arrayBuffer();
-        const blob = await heic2any({ blob: new Blob([arrayBuffer]), toType: 'image/jpeg', quality: 0.9 });
-        
-        const jpegFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
-        await handleRegularFile(jpegFile, true);
-        
-        showToast('success', 'HEIC Converted', `${file.name} converted to JPEG`);
-        
-    } catch (error) {
-        console.error('HEIC conversion error:', error);
-        showToast('error', 'Conversion Error', `Could not convert ${file.name}`);
-    }
-}
-
-async function handleRegularFile(file, converted = false) {
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        
-        reader.onload = (e) => {
-            const img = new Image();
-            
-            img.onload = () => {
-                state.uploadedFiles.push({
-                    name: file.name,
-                    type: file.type,
-                    size: file.size,
-                    width: img.width,
-                    height: img.height,
-                    url: e.target.result,
-                    converted: converted
-                });
-                
-                addFileToList({
-                    name: file.name,
-                    size: formatFileSize(file.size),
-                    converted: converted
-                });
-                
-                resolve();
-            };
-            
-            img.onerror = () => {
-                console.error('Failed to load image:', file.name);
-                resolve();
-            };
-            
-            img.src = e.target.result;
-        };
-        
-        reader.onerror = () => {
-            console.error('Failed to read file:', file.name);
-            resolve();
-        };
-        
-        reader.readAsDataURL(file);
-    });
-}
-
-function isImageFile(filename) {
-    return /\.(jpg|jpeg|png|webp|gif|bmp|heic|heif)$/i.test(filename);
-}
-
-function getMimeType(filename) {
-    const ext = filename.split('.').pop().toLowerCase();
-    const mimeTypes = {
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'png': 'image/png',
-        'webp': 'image/webp',
-        'gif': 'image/gif',
-        'bmp': 'image/bmp',
-        'heic': 'image/heic',
-        'heif': 'image/heif'
-    };
-    return mimeTypes[ext] || 'image/jpeg';
+function escapeHtml(text) {
+  var d = document.createElement('div');
+  d.textContent = text;
+  return d.innerHTML;
 }
 
 function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  if (bytes === 0) return '0 B';
+  var k = 1024;
+  var sizes = ['B', 'KB', 'MB', 'GB'];
+  var i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-function handleUrlAdd() {
-    const textarea = $('#image-url-input');
-    if (!textarea) return;
-    
-    const urls = textarea.value.trim().split('\n').filter(url => url.trim());
-    
-    if (urls.length === 0) {
-        showToast('warning', 'No URLs', 'Please enter at least one image URL');
-        return;
-    }
-    
-    let loadedCount = 0;
-    const totalUrls = urls.length;
-    
-    urls.forEach(url => {
-        const cleanUrl = url.trim();
-        
-        // Validate URL
-        try {
-            new URL(cleanUrl);
-        } catch {
-            console.warn('Invalid URL:', cleanUrl);
-            return;
-        }
-        
-        // Fetch and load image
-        fetch(cleanUrl)
-            .then(response => {
-                if (!response.ok) throw new Error('Failed to fetch');
-                return response.blob();
-            })
-            .then(blob => {
-                const fileName = cleanUrl.split('/').pop() || `image-${Date.now()}.jpg`;
-                const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
-                return handleRegularFile(file);
-            })
-            .then(() => {
-                loadedCount++;
-                if (loadedCount === totalUrls) {
-                    showToast('success', 'URLs Loaded', `${loadedCount} image(s) loaded from URLs`);
-                    textarea.value = '';
-                }
-            })
-            .catch(error => {
-                console.error('Error loading URL:', cleanUrl, error);
-                loadedCount++;
-            });
-    });
+function isImageFile(filename) {
+  return /\.(jpg|jpeg|png|webp|gif|bmp|heic|heif)$/i.test(filename);
 }
 
-function switchUploadMethod(method) {
-    $$('.upload-method-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.method === method);
-    });
-    
-    $('#files-upload').style.display = method === 'files' ? 'block' : 'none';
-    $('#url-upload').style.display = method === 'url' ? 'block' : 'none';
+function getMimeType(filename) {
+  var ext = filename.split('.').pop().toLowerCase();
+  var map = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp',
+    heic: 'image/heic', heif: 'image/heif'
+  };
+  return map[ext] || 'image/jpeg';
 }
 
-// =========================================
-// UI UPDATES
-// =========================================
-
-function addFileToList(file) {
-    const fileList = $('#file-list');
-    if (!fileList) return;
-    
-    const fileItem = document.createElement('div');
-    fileItem.className = `file-item${file.converted ? ' converted' : ''}`;
-    fileItem.innerHTML = `
-        <div class="file-icon${file.converted ? ' converted' : ''}">
-            <i class="fas fa-image"></i>
-        </div>
-        <div class="file-info">
-            <div class="file-name">${escapeHtml(file.name)}${file.converted ? '<span class="converted-badge">Converted</span>' : ''}</div>
-            <div class="file-size">${file.size}</div>
-        </div>
-        <button class="remove-file" onclick="removeFile('${escapeHtml(file.name)}')">
-            <i class="fas fa-times"></i>
-        </button>
-    `;
-    
-    fileList.appendChild(fileItem);
+function resolveWatermarkUrl(file) {
+  return 'assets/' + file;
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function removeFile(fileName) {
-    state.uploadedFiles = state.uploadedFiles.filter(f => f.name !== fileName);
-    
-    const fileList = $('#file-list');
-    if (fileList) {
-        const items = fileList.querySelectorAll('.file-item');
-        items.forEach(item => {
-            if (item.querySelector('.file-name').textContent.includes(fileName)) {
-                item.remove();
-            }
-        });
-    }
-    
-    updateFileCount();
-    updateProcessCount();
-    
-    if (state.uploadedFiles.length === 0) {
-        resetPreview();
-    }
-}
-
-function updateFileCount() {
-    const count = state.uploadedFiles.length;
-    $('#file-count').textContent = count;
-    
-    const processBtn = $('#process-btn');
-    if (processBtn) {
-        processBtn.disabled = count === 0;
-    }
-}
-
-function updateProcessCount() {
-    const count = state.uploadedFiles.length;
-    $('#process-count').textContent = count;
-    
-    // Enable/disable process button
-    const processBtn = $('#process-btn');
-    if (processBtn) {
-        processBtn.disabled = count === 0;
-    }
-}
-
-function updateSteps() {
-    const steps = $$('.step');
-    let activeStep = 0;
-    
-    if (state.uploadedFiles.length > 0) activeStep = 1;
-    if (state.selectedWatermark) activeStep = Math.max(activeStep, 2);
-    if (state.previewGenerated) activeStep = Math.max(activeStep, 4);
-    
-    steps.forEach((step, index) => {
-        step.classList.toggle('active', index < activeStep);
-    });
-}
-
-// =========================================
-// PREVIEW GENERATION
-// =========================================
-
-// KEY FIX: Live preview update function that clears canvas properly
-function updatePreviewLive() {
-    // Only update if we have generated a preview and have uploaded files
-    if (!state.previewGenerated || state.uploadedFiles.length === 0) return;
-    
-    // Debounce to avoid excessive redraws
-    clearTimeout(window.livePreviewTimeout);
-    window.livePreviewTimeout = setTimeout(() => {
-        generatePreview();
-    }, 50);
-}
-
-async function generatePreview() {
-    if (state.uploadedFiles.length === 0) {
-        showToast('warning', 'No Images', 'Please upload images first');
-        return;
-    }
-    
-    const canvas = $('#preview-canvas');
-    const placeholder = $('#preview-placeholder');
-    const loading = $('#preview-loading');
-    const previewInfo = $('#preview-info');
-    const enlargeBtn = $('#enlarge-preview');
-    
-    if (!canvas || !placeholder) return;
-    
-    // Show loading state
-    placeholder.style.display = 'none';
-    if (loading) loading.style.display = 'flex';
-    
-    try {
-        // Reset processed previews
-        state.processedPreviews = [];
-        state.currentPreviewIndex = 0;
-        
-        // Process all images
-        await processPreviewsSequentially();
-        
-        // Display first preview
-        displayPreviewImage();
-        
-        // Update UI
-        if (loading) loading.style.display = 'none';
-        canvas.style.display = 'block';
-        if (previewInfo) previewInfo.style.display = 'flex';
-        if (enlargeBtn) enlargeBtn.style.display = 'flex';
-        
-        state.previewGenerated = true;
-        updateSteps();
-        
-    } catch (error) {
-        console.error('Preview generation error:', error);
-        showToast('error', 'Preview Error', 'Could not generate preview');
-        if (loading) loading.style.display = 'none';
-        placeholder.style.display = 'flex';
-    }
-}
-
-async function processPreviewsSequentially() {
-    for (let i = 0; i < state.uploadedFiles.length; i++) {
-        const fileData = state.uploadedFiles[i];
-        
-        await new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            
-            img.onload = () => {
-                // Create canvas for this preview
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                // Calculate dimensions (max 1200px width while maintaining aspect ratio)
-                const maxWidth = CONFIG.previewWidth;
-                const scale = Math.min(1, maxWidth / img.width);
-                canvas.width = img.width * scale;
-                canvas.height = img.height * scale;
-                
-                // KEY FIX: Clear the canvas before drawing - this prevents layering
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                // Draw the base image
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                
-                // Draw watermark if selected
-                if (state.selectedWatermark) {
-                    drawWatermarkOnCanvas(ctx, canvas);
-                }
-                
-                // Store the result
-                state.processedPreviews.push({
-                    canvas: canvas,
-                    name: fileData.name,
-                    index: i
-                });
-                
-                resolve();
-            };
-            
-            img.onerror = () => {
-                console.error('Failed to load image:', fileData.name);
-                resolve();
-            };
-            
-            img.src = fileData.url;
-        });
-    }
-}
-
-function drawWatermarkOnCanvas(ctx, canvas) {
-    const watermark = state.selectedWatermark;
-    if (!watermark) return;
-    
-    // Get the position value and normalize it (handle hyphens, underscores, spaces)
-    const positionSelect = $('#position-select');
-    let position = positionSelect?.value || 'center';
-    
-    // Normalize the position value to match our switch cases
-    position = position.toLowerCase().replace(/[-_\s]/g, '-');
-    
-    const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
-    const size = parseInt($('#size-slider')?.value || 50) / 100;
-    
-    // Calculate watermark dimensions
-    const maxSize = Math.min(canvas.width, canvas.height) * size;
-    const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
-    
-    let wmWidth, wmHeight;
-    if (aspectRatio > 1) {
-        wmWidth = maxSize;
-        wmHeight = maxSize / aspectRatio;
-    } else {
-        wmHeight = maxSize;
-        wmWidth = maxSize * aspectRatio;
-    }
-    
-    // Calculate position
-    const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
-    
-    // Apply opacity and draw
-    ctx.globalAlpha = opacity;
-    ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
-    ctx.globalAlpha = 1.0; // Reset to default
-}
-
-function getWatermarkPosition(canvas, wmWidth, wmHeight, position) {
-    const padding = 20;
-    let x, y;
-    
-    switch (position) {
-        case 'top-left':
-            x = padding;
-            y = padding;
-            break;
-            
-        case 'top-right':
-            x = canvas.width - wmWidth - padding;
-            y = padding;
-            break;
-            
-        case 'bottom-left':
-            x = padding;
-            y = canvas.height - wmHeight - padding;
-            break;
-            
-        case 'bottom-right':
-            x = canvas.width - wmWidth - padding;
-            y = canvas.height - wmHeight - padding;
-            break;
-            
-        case 'center':
-        default:
-            x = (canvas.width - wmWidth) / 2;
-            y = (canvas.height - wmHeight) / 2;
-            break;
-    }
-    
-    return { x, y };
-}
-
-function displayPreviewImage() {
-    const canvas = $('#preview-canvas');
-    const previewInfo = $('#preview-info');
-    const fileName = $('#preview-file-name');
-    const counter = $('#preview-counter');
-    
-    if (!canvas || state.processedPreviews.length === 0) return;
-    
-    const currentPreview = state.processedPreviews[state.currentPreviewIndex];
-    
-    // Clear the canvas and draw the current preview
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(currentPreview.canvas, 0, 0);
-    
-    // Update canvas size to match preview
-    canvas.width = currentPreview.canvas.width;
-    canvas.height = currentPreview.canvas.height;
-    
-    // Re-draw after resize
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(currentPreview.canvas, 0, 0);
-    
-    // Update info
-    if (fileName) fileName.textContent = currentPreview.name;
-    if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
-    
-    // Update navigation buttons
-    updatePreviewNavigation();
-    
-    // Update fullscreen info
-    updateFullscreenInfo();
-}
-
-function updatePreviewNavigation() {
-    const prevBtn = $('#prev-image');
-    const nextBtn = $('#next-image');
-    const counter = $('#preview-counter');
-    
-    if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
-    if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
-    if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
-}
-
-function navigatePreview(direction) {
-    const newIndex = state.currentPreviewIndex + direction;
-    
-    if (newIndex >= 0 && newIndex < state.processedPreviews.length) {
-        state.currentPreviewIndex = newIndex;
-        displayPreviewImage();
-    }
-}
-
-function resetPreview() {
-    const canvas = $('#preview-canvas');
-    const placeholder = $('#preview-placeholder');
-    const loading = $('#preview-loading');
-    const previewInfo = $('#preview-info');
-    const enlargeBtn = $('#enlarge-preview');
-    
-    if (canvas) {
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        canvas.style.display = 'none';
-    }
-    
-    if (placeholder) placeholder.style.display = 'flex';
-    if (loading) loading.style.display = 'none';
-    if (previewInfo) previewInfo.style.display = 'none';
-    if (enlargeBtn) enlargeBtn.style.display = 'none';
-    
-    state.processedPreviews = [];
-    state.currentPreviewIndex = 0;
-    state.previewGenerated = false;
-    updateSteps();
-}
-
-// =========================================
-// FULLSCREEN PREVIEW
-// =========================================
-
-function openFullscreen() {
-    if (state.processedPreviews.length === 0) return;
-    
-    const modal = $('#fullscreen-modal');
-    if (!modal) return;
-    
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-    
-    displayFullscreenImage();
-}
-
-function closeFullscreen() {
-    const modal = $('#fullscreen-modal');
-    if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = '';
-    }
-}
-
-function displayFullscreenImage() {
-    const canvas = $('#fullscreen-canvas');
-    const modal = $('#fullscreen-modal');
-    
-    if (!canvas || !modal || state.processedPreviews.length === 0) return;
-    
-    const currentPreview = state.processedPreviews[state.currentPreviewIndex];
-    
-    // Copy to fullscreen canvas
-    canvas.width = currentPreview.canvas.width;
-    canvas.height = currentPreview.canvas.height;
-    
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(currentPreview.canvas, 0, 0);
-    
-    // Fit to container
-    fitCanvasToContainer(canvas);
-    updateFullscreenInfo();
-}
-
-function fitCanvasToContainer(canvas) {
-    const container = $('#fullscreen-modal .fullscreen-content');
-    if (!container) return;
-    
-    const containerRect = container.getBoundingClientRect();
-    const padding = 40;
-    
-    const maxWidth = containerRect.width - padding * 2;
-    const maxHeight = containerRect.height - padding * 2 - 60; // Account for info bar
-    
-    const scale = Math.min(1, maxWidth / canvas.width, maxHeight / canvas.height);
-    
-    canvas.style.width = `${canvas.width * scale}px`;
-    canvas.style.height = `${canvas.height * scale}px`;
-}
-
-function navigateFullscreen(direction) {
-    const newIndex = state.currentPreviewIndex + direction;
-    
-    if (newIndex >= 0 && newIndex < state.processedPreviews.length) {
-        state.currentPreviewIndex = newIndex;
-        displayFullscreenImage();
-    }
-}
-
-function updateFullscreenInfo() {
-    const filename = $('#fullscreen-filename');
-    const counter = $('#fullscreen-counter');
-    const prevBtn = $('#fullscreen-prev');
-    const nextBtn = $('#fullscreen-next');
-    
-    if (state.processedPreviews.length > 0) {
-        const currentPreview = state.processedPreviews[state.currentPreviewIndex];
-        if (filename) filename.textContent = currentPreview.name;
-        if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
-    }
-    
-    if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
-    if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
-}
-
-function handlePreviewKeyboard(e) {
-    const modal = $('#fullscreen-modal');
-    if (!modal?.classList.contains('active')) return;
-    
-    switch (e.key) {
-        case 'ArrowLeft':
-            navigateFullscreen(-1);
-            break;
-        case 'ArrowRight':
-            navigateFullscreen(1);
-            break;
-        case 'Escape':
-            closeFullscreen();
-            break;
-    }
-}
-
-// =========================================
-// IMAGE PROCESSING & DOWNLOAD
-// =========================================
-
-async function processAllImages() {
-    if (state.uploadedFiles.length === 0) {
-        showToast('warning', 'No Images', 'Please upload images first');
-        return;
-    }
-    
-    // Generate preview first if not done
-    if (!state.previewGenerated) {
-        await generatePreview();
-    }
-    
-    const processBtn = $('#process-btn');
-    const btnText = processBtn?.querySelector('.btn-text');
-    const btnLoader = processBtn?.querySelector('.btn-loader');
-    const downloadSection = $('#download-section');
-    const downloadLink = $('#download-link');
-    
-    if (!processBtn) return;
-    
-    // Show processing state
-    state.isProcessing = true;
-    processBtn.disabled = true;
-    if (btnText) btnText.style.visibility = 'hidden';
-    if (btnLoader) btnLoader.style.display = 'flex';
-    if (downloadSection) downloadSection.style.display = 'none';
-    
-    try {
-        const zip = new JSZip();
-        
-        // Process each image
-        for (let i = 0; i < state.uploadedFiles.length; i++) {
-            const fileData = state.uploadedFiles[i];
-            const preview = state.processedPreviews[i];
-            
-            // Create final canvas
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            await new Promise((resolve) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                
-                img.onload = () => {
-                    // Use original image dimensions for full quality
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    
-                    // Clear and draw
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // Apply watermark if available
-                    if (state.selectedWatermark) {
-                        drawWatermarkFullSize(ctx, canvas);
-                    }
-                    
-                    // Convert to blob
-                    canvas.toBlob((blob) => {
-                        // Generate filename
-                        const originalName = fileData.name.replace(/\.[^/.]+$/, '');
-                        const newName = `${originalName}-watermarked.jpg`;
-                        
-                        zip.file(newName, blob);
-                        resolve();
-                    }, 'image/jpeg', CONFIG.quality);
-                };
-                
-                img.onerror = () => {
-                    console.error('Failed to process:', fileData.name);
-                    resolve();
-                };
-                
-                img.src = fileData.url;
-            });
-        }
-        
-        // Generate ZIP
-        const zipBlob = await zip.generateAsync({
-            type: 'blob',
-            compression: 'DEFLATE',
-            compressionOptions: { level: 6 }
-        });
-        
-        // Create download
-        const url = URL.createObjectURL(zipBlob);
-        if (downloadLink) {
-            downloadLink.href = url;
-            downloadLink.download = `watermarked-images-${Date.now()}.zip`;
-        }
-        
-        // Show download section
-        if (downloadSection) downloadSection.style.display = 'block';
-        
-        showToast('success', 'Processing Complete', `${state.uploadedFiles.length} images processed successfully`);
-        
-    } catch (error) {
-        console.error('Processing error:', error);
-        showToast('error', 'Processing Error', 'Failed to process images');
-    } finally {
-        // Reset button state
-        state.isProcessing = false;
-        processBtn.disabled = false;
-        if (btnText) btnText.style.visibility = 'visible';
-        if (btnLoader) btnLoader.style.display = 'none';
-    }
-}
-
-function drawWatermarkFullSize(ctx, canvas) {
-    const watermark = state.selectedWatermark;
-    if (!watermark) return;
-    
-    // Get the position value and normalize it
-    const positionSelect = $('#position-select');
-    let position = positionSelect?.value || 'center';
-    
-    // Normalize the position value to match our switch cases
-    position = position.toLowerCase().replace(/[-_\s]/g, '-');
-    
-    const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
-    const size = parseInt($('#size-slider')?.value || 50) / 100;
-    
-    let wmWidth, wmHeight;
-    if (aspectRatio > 1) {
-        wmWidth = maxSize;
-        wmHeight = maxSize / aspectRatio;
-    } else {
-        wmHeight = maxSize;
-        wmWidth = maxSize * aspectRatio;
-    }
-    
-    // Calculate position
-    const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
-    
-    // Apply and draw
-    ctx.globalAlpha = opacity;
-    ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
-    ctx.globalAlpha = 1.0;
-}
-
-// =========================================
-// ADVANCED OPTIONS
-// =========================================
-
-function toggleAdvancedSection() {
-    const section = $('#advanced-watermark-section');
-    const toggle = $('#advanced-toggle');
-    
-    if (!section || !toggle) return;
-    
-    const isHidden = section.style.display === 'none';
-    section.style.display = isHidden ? 'block' : 'none';
-    
-    const icon = toggle.querySelector('.fas');
-    if (icon) {
-        icon.classList.toggle('fa-chevron-down', !isHidden);
-        icon.classList.toggle('fa-chevron-up', isHidden);
-    }
-}
-
-function handleCustomWatermarkUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    if (!file.type.startsWith('image/')) {
-        showToast('warning', 'Invalid File', 'Please select an image file');
-        return;
-    }
-    
-    const reader = new FileReader();
-    
-    reader.onload = (event) => {
-        const preview = $('#watermark-preview');
-        const placeholder = $('#watermark-placeholder');
-        
-        if (!preview || !placeholder) return;
-        
-        const img = new Image();
-        img.onload = () => {
-            state.customWatermark = img;
-            state.selectedWatermark = img;
-            
-            preview.src = event.target.result;
-            preview.style.display = 'block';
-            placeholder.style.display = 'none';
-            
-            // Regenerate preview if we have uploaded images
-            if (state.uploadedFiles.length > 0 && state.previewGenerated) {
-                generatePreview();
-            }
-            
-            showToast('success', 'Watermark Uploaded', 'Custom watermark applied successfully');
-        };
-        
-        img.onerror = () => {
-            showToast('error', 'Upload Failed', 'Could not load custom watermark');
-        };
-        
-        img.src = event.target.result;
-    };
-    
-    reader.onerror = () => {
-        showToast('error', 'Read Error', 'Could not read file');
-    };
-    
-    reader.readAsDataURL(file);
-}
-
-// =========================================
-// HELP MODAL
-// =========================================
-
-function openHelpModal() {
-    const modal = $('#help-modal');
-    if (modal) {
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-    }
-}
-
-function closeHelpModal() {
-    const modal = $('#help-modal');
-    if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = '';
-    }
-}
-
-// =========================================
-// THEME TOGGLE
-// =========================================
-
-function toggleTheme() {
-    state.isDarkMode = !state.isDarkMode;
-    document.body.classList.toggle('dark-mode', state.isDarkMode);
-    
-    const themeBtn = $('#theme-toggle');
-    if (themeBtn) {
-        const icon = themeBtn.querySelector('.fas');
-        if (icon) {
-            icon.classList.toggle('fa-moon', !state.isDarkMode);
-            icon.classList.toggle('fa-sun', state.isDarkMode);
-        }
-    }
-    
-    localStorage.setItem('theme', state.isDarkMode ? 'dark' : 'light');
-}
-
-function checkTheme() {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark') {
-        state.isDarkMode = true;
-        document.body.classList.add('dark-mode');
-        const themeBtn = $('#theme-toggle');
-        if (themeBtn) {
-            const icon = themeBtn.querySelector('.fas');
-            if (icon) {
-                icon.classList.remove('fa-moon');
-                icon.classList.add('fa-sun');
-            }
-        }
-    }
-}
-
-// =========================================
+// ==========================================================
 // TOAST NOTIFICATIONS
-// =========================================
-
+// ==========================================================
 function showToast(type, title, message) {
-    const container = $('#toast-container');
-    if (!container) return;
-    
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    
-    const icons = {
-        success: 'fa-check-circle',
-        warning: 'fa-exclamation-triangle',
-        error: 'fa-times-circle',
-        info: 'fa-info-circle',
-        conversion: 'fa-file-image'
-    };
-    
-    toast.innerHTML = `
-        <div class="toast-icon">
-            <i class="fas ${icons[type] || icons.info}"></i>
-        </div>
-        <div class="toast-content">
-            <div class="toast-title">${escapeHtml(title)}</div>
-            <div class="toast-message">${escapeHtml(message)}</div>
-        </div>
-        <button class="toast-close">
-            <i class="fas fa-times"></i>
-        </button>
-    `;
-    
-    container.appendChild(toast);
-    
-    // Setup close button
-    toast.querySelector('.toast-close')?.addEventListener('click', () => {
-        removeToast(toast);
-    });
-    
-    // Auto remove
-    const timeout = setTimeout(() => removeToast(toast), 5000);
-    toast.dataset.timeout = timeout;
-    
-    // Slide in animation
-    requestAnimationFrame(() => {
-        toast.style.animation = 'toastSlideIn 0.3s ease-out';
-    });
+  var container = $('#toast-container');
+  if (!container) return;
+  var icons = {
+    success: 'fa-check-circle',
+    warning: 'fa-exclamation-triangle',
+    error: 'fa-times-circle',
+    info: 'fa-info-circle'
+  };
+  var toast = document.createElement('div');
+  toast.className = 'toast toast-' + type;
+  toast.innerHTML =
+    '<div class="toast-icon"><i class="fas ' + (icons[type] || icons.info) + '"></i></div>' +
+    '<div class="toast-content"><div class="toast-title">' + escapeHtml(title) + '</div>' +
+    '<div class="toast-message">' + escapeHtml(message) + '</div></div>' +
+    '<button class="toast-close"><i class="fas fa-times"></i></button>';
+  container.appendChild(toast);
+
+  var closeBtn = toast.querySelector('.toast-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function () { removeToast(toast); });
+  }
+  var tid = setTimeout(function () { removeToast(toast); }, 5000);
+  toast.dataset.timeout = String(tid);
 }
 
 function removeToast(toast) {
-    if (!toast) return;
-    
-    clearTimeout(parseInt(toast.dataset.timeout));
-    toast.style.animation = 'toastSlideOut 0.3s ease-in forwards';
-    
-    toast.addEventListener('animationend', () => {
-        toast.remove();
+  if (!toast || !toast.parentNode) return;
+  clearTimeout(parseInt(toast.dataset.timeout, 10));
+  toast.classList.add('toast-exit');
+  toast.addEventListener('animationend', function () { toast.remove(); });
+}
+
+// ==========================================================
+// INITIALIZATION
+// ==========================================================
+document.addEventListener('DOMContentLoaded', function () {
+  populateWatermarkDropdown();
+  setupEventListeners();
+  selectDefaultWatermark();
+  updateCounts();
+});
+
+function selectDefaultWatermark() {
+  var list = state.isArmlsMode ? ARMLS_WATERMARKS : STANDARD_WATERMARKS;
+  var def = null;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].isDefault) { def = list[i]; break; }
+  }
+  if (!def) def = list[0];
+  if (def) {
+    var sel = $('#watermark-select');
+    if (sel) sel.value = def.file;
+    selectWatermark(resolveWatermarkUrl(def.file));
+  }
+}
+
+// ==========================================================
+// WATERMARK DROPDOWN
+// ==========================================================
+function populateWatermarkDropdown() {
+  var sel = $('#watermark-select');
+  if (!sel) return;
+  sel.innerHTML = '';
+  var list = state.isArmlsMode ? ARMLS_WATERMARKS : STANDARD_WATERMARKS;
+
+  for (var i = 0; i < list.length; i++) {
+    var wm = list[i];
+    var opt = document.createElement('option');
+    opt.value = wm.file;
+    opt.textContent = wm.name;
+    if (wm.isDefault) opt.selected = true;
+    sel.appendChild(opt);
+  }
+
+  var helper = $('#wm-helper-text');
+  if (helper) {
+    helper.textContent = state.isArmlsMode
+      ? 'ARMLS mode: Only approved watermarks shown. No center placement allowed.'
+      : 'Default: reverse-logo (white). Toggle ARMLS above for compliance mode.';
+  }
+}
+
+// ==========================================================
+// WATERMARK SELECTION
+// ==========================================================
+function selectWatermark(url) {
+  var preview = $('#watermark-preview');
+  var placeholder = $('#watermark-placeholder');
+  if (!preview || !placeholder) return;
+
+  state.selectedWatermark = null;
+  state.selectedWatermarkUrl = url;
+
+  var img = new Image();
+  img.crossOrigin = 'anonymous';
+
+  img.onload = function () {
+    state.selectedWatermark = img;
+    preview.src = url;
+    preview.style.display = 'block';
+    placeholder.style.display = 'none';
+    if (state.uploadedFiles.length > 0 && state.previewGenerated) {
+      debouncedGeneratePreview();
+    }
+  };
+
+  img.onerror = function () {
+    // Fallback: try GitHub raw URL
+    var ghUrl = CONFIG.githubBase + url.replace('assets/', '');
+    if (url !== ghUrl) {
+      var img2 = new Image();
+      img2.crossOrigin = 'anonymous';
+      img2.onload = function () {
+        state.selectedWatermark = img2;
+        state.selectedWatermarkUrl = ghUrl;
+        preview.src = ghUrl;
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+        if (state.uploadedFiles.length > 0 && state.previewGenerated) {
+          debouncedGeneratePreview();
+        }
+      };
+      img2.onerror = function () {
+        showToast('warning', 'Watermark Error', 'Could not load watermark: ' + url);
+      };
+      img2.src = ghUrl;
+    } else {
+      showToast('warning', 'Watermark Error', 'Could not load watermark: ' + url);
+    }
+  };
+
+  img.src = url;
+}
+
+// ==========================================================
+// ARMLS MODE
+// ==========================================================
+function toggleArmlsMode(enabled) {
+  state.isArmlsMode = enabled;
+
+  var card = $('#armls-card');
+  var statusEl = $('#armls-status');
+  var customWrapper = $('#custom-upload-wrapper');
+  var posSelect = $('#position-select');
+
+  if (card) card.classList.toggle('armls-active', enabled);
+  if (statusEl) statusEl.textContent = enabled ? 'ON' : 'OFF';
+
+  // Disable / enable custom upload section
+  if (customWrapper) {
+    if (enabled) {
+      customWrapper.classList.add('custom-upload-disabled');
+      var advSection = $('#advanced-watermark-section');
+      if (advSection) advSection.style.display = 'none';
+    } else {
+      customWrapper.classList.remove('custom-upload-disabled');
+    }
+  }
+
+  // ARMLS: disable center position
+  if (posSelect) {
+    var centerOpt = posSelect.querySelector('option[value="center"]');
+    if (enabled) {
+      if (centerOpt) centerOpt.disabled = true;
+      if (posSelect.value === 'center') {
+        posSelect.value = 'bottom-right';
+      }
+    } else {
+      if (centerOpt) centerOpt.disabled = false;
+    }
+  }
+
+  // Repopulate dropdown and select first item
+  populateWatermarkDropdown();
+  var list = enabled ? ARMLS_WATERMARKS : STANDARD_WATERMARKS;
+  var def = null;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].isDefault) { def = list[i]; break; }
+  }
+  if (!def) def = list[0];
+  if (def) {
+    var sel = $('#watermark-select');
+    if (sel) sel.value = def.file;
+    selectWatermark(resolveWatermarkUrl(def.file));
+  }
+
+  showToast(
+    'info', 'ARMLS Mode',
+    enabled
+      ? 'ARMLS compliance enabled. Only approved watermarks available.'
+      : 'ARMLS compliance disabled. Full watermark library available.'
+  );
+}
+
+// ==========================================================
+// EVENT LISTENERS
+// ==========================================================
+function setupEventListeners() {
+  // File input
+  var fileInput = $('#file-input');
+  if (fileInput) fileInput.addEventListener('change', handleFileSelect);
+
+  // Drop zone
+  var dropZone = $('#drop-zone');
+  if (dropZone) {
+    dropZone.addEventListener('click', function () { if (fileInput) fileInput.click(); });
+    dropZone.addEventListener('dragover', handleDragOver);
+    dropZone.addEventListener('dragleave', handleDragLeave);
+    dropZone.addEventListener('drop', handleDrop);
+  }
+
+  // Upload method tabs
+  $$('.upload-method-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      switchUploadMethod(btn.dataset.method);
     });
+  });
+
+  // URL add
+  var addUrlBtn = $('#add-url-btn');
+  if (addUrlBtn) addUrlBtn.addEventListener('click', handleUrlAdd);
+  var urlInput = $('#image-url-input');
+  if (urlInput) {
+    urlInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.ctrlKey) handleUrlAdd();
+    });
+  }
+
+  // Watermark select
+  var wmSel = $('#watermark-select');
+  if (wmSel) {
+    wmSel.addEventListener('change', function (e) {
+      if (e.target.value) selectWatermark(resolveWatermarkUrl(e.target.value));
+    });
+  }
+
+  // ARMLS toggle
+  var mlsToggle = $('#mls-toggle');
+  if (mlsToggle) {
+    mlsToggle.addEventListener('change', function (e) {
+      toggleArmlsMode(e.target.checked);
+    });
+  }
+
+  // Opacity slider
+  var opSlider = $('#opacity-slider');
+  if (opSlider) {
+    opSlider.addEventListener('input', function (e) {
+      var valEl = $('#opacity-value');
+      if (valEl) valEl.textContent = e.target.value + '%';
+      debouncedUpdatePreview();
+    });
+  }
+
+  // Size slider
+  var szSlider = $('#size-slider');
+  if (szSlider) {
+    szSlider.addEventListener('input', function (e) {
+      var valEl = $('#size-value');
+      if (valEl) valEl.textContent = e.target.value + '%';
+      debouncedUpdatePreview();
+    });
+  }
+
+  // Position select
+  var posSel = $('#position-select');
+  if (posSel) posSel.addEventListener('change', debouncedUpdatePreview);
+
+  // Generate preview
+  var genBtn = $('#generate-preview');
+  if (genBtn) genBtn.addEventListener('click', generatePreview);
+
+  // Preview navigation
+  var prevBtn = $('#prev-image');
+  if (prevBtn) prevBtn.addEventListener('click', function () { navigatePreview(-1); });
+  var nextBtn = $('#next-image');
+  if (nextBtn) nextBtn.addEventListener('click', function () { navigatePreview(1); });
+
+  // Fullscreen
+  var enlargeBtn = $('#enlarge-preview');
+  if (enlargeBtn) enlargeBtn.addEventListener('click', openFullscreen);
+  var fsClose = $('#fullscreen-close');
+  if (fsClose) fsClose.addEventListener('click', closeFullscreen);
+  var fsPrev = $('#fullscreen-prev');
+  if (fsPrev) fsPrev.addEventListener('click', function () { navigateFullscreen(-1); });
+  var fsNext = $('#fullscreen-next');
+  if (fsNext) fsNext.addEventListener('click', function () { navigateFullscreen(1); });
+
+  // Process & download
+  var processBtn = $('#process-btn');
+  if (processBtn) processBtn.addEventListener('click', processAllImages);
+
+  // Advanced toggle
+  var advToggle = $('#advanced-toggle');
+  if (advToggle) advToggle.addEventListener('click', toggleAdvancedSection);
+
+  // Custom watermark upload
+  var changeWm = $('#change-watermark');
+  if (changeWm) {
+    changeWm.addEventListener('click', function () {
+      var wmUp = $('#watermark-upload');
+      if (wmUp) wmUp.click();
+    });
+  }
+  var wmUpload = $('#watermark-upload');
+  if (wmUpload) wmUpload.addEventListener('change', handleCustomWatermarkUpload);
+
+  // Help modal
+  var helpBtn = $('#help-btn');
+  if (helpBtn) helpBtn.addEventListener('click', openHelpModal);
+  var closeHelp = $('#close-help');
+  if (closeHelp) closeHelp.addEventListener('click', closeHelpModal);
+
+  // Reset position button
+  var resetBtn = $('#reset-position');
+  if (resetBtn) resetBtn.addEventListener('click', resetCurrentImagePosition);
+
+  // Canvas drag / click for per-image positioning
+  setupCanvasDrag();
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closeFullscreen();
+      closeHelpModal();
+    }
+    var fsModal = $('#fullscreen-modal');
+    if (fsModal && fsModal.classList.contains('active')) {
+      if (e.key === 'ArrowLeft') navigateFullscreen(-1);
+      if (e.key === 'ArrowRight') navigateFullscreen(1);
+    }
+  });
+
+  // Close modals on overlay click
+  var helpModal = $('#help-modal');
+  if (helpModal) {
+    helpModal.addEventListener('click', function (e) {
+      if (e.target === helpModal) closeHelpModal();
+    });
+  }
+  var fsModal = $('#fullscreen-modal');
+  if (fsModal) {
+    fsModal.addEventListener('click', function (e) {
+      if (e.target === fsModal || e.target.classList.contains('fullscreen-content')) closeFullscreen();
+    });
+  }
+
+  // Body-level drag prevention
+  document.body.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.body.addEventListener('drop', function (e) { e.preventDefault(); });
 }
 
-// =========================================
-// UTILITY FUNCTIONS
-// =========================================
+// ==========================================================
+// CANVAS DRAG & DROP — PER-IMAGE WATERMARK PLACEMENT
+// ==========================================================
+function setupCanvasDrag() {
+  var canvas = $('#preview-canvas');
+  if (!canvas) return;
 
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
+  var dragging = false;
+
+  function getCanvasFraction(e) {
+    var rect = canvas.getBoundingClientRect();
+    var clientX, clientY;
+    if (e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    var xFrac = (clientX - rect.left) / rect.width;
+    var yFrac = (clientY - rect.top) / rect.height;
+    return {
+      xFrac: Math.max(0, Math.min(1, xFrac)),
+      yFrac: Math.max(0, Math.min(1, yFrac))
     };
+  }
+
+  function applyPosition(frac) {
+    if (!state.previewGenerated || state.uploadedFiles.length === 0) return;
+    var idx = state.currentPreviewIndex;
+    if (idx < 0 || idx >= state.uploadedFiles.length) return;
+
+    // In ARMLS mode snap to nearest corner (no center)
+    if (state.isArmlsMode) {
+      frac.xFrac = frac.xFrac < 0.5 ? 0 : 1;
+      frac.yFrac = frac.yFrac < 0.5 ? 0 : 1;
+    }
+
+    state.uploadedFiles[idx].customPosition = { xFrac: frac.xFrac, yFrac: frac.yFrac };
+    regenerateCurrentPreview();
+  }
+
+  // Mouse events
+  canvas.addEventListener('mousedown', function (e) {
+    if (!state.previewGenerated) return;
+    dragging = true;
+    applyPosition(getCanvasFraction(e));
+  });
+  canvas.addEventListener('mousemove', function (e) {
+    if (dragging) applyPosition(getCanvasFraction(e));
+  });
+  document.addEventListener('mouseup', function () { dragging = false; });
+
+  // Touch events
+  canvas.addEventListener('touchstart', function (e) {
+    if (!state.previewGenerated) return;
+    dragging = true;
+    e.preventDefault();
+    applyPosition(getCanvasFraction(e));
+  }, { passive: false });
+  canvas.addEventListener('touchmove', function (e) {
+    if (dragging) {
+      e.preventDefault();
+      applyPosition(getCanvasFraction(e));
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchend', function () { dragging = false; });
 }
 
-// Make functions globally accessible
-window.removeFile = removeFile;
-window.openHelpModal = openHelpModal;
-window.closeHelpModal = closeHelpModal;
-window.toggleTheme = toggleTheme;
+function resetCurrentImagePosition() {
+  var idx = state.currentPreviewIndex;
+  if (idx >= 0 && idx < state.uploadedFiles.length) {
+    state.uploadedFiles[idx].customPosition = null;
+    regenerateCurrentPreview();
+    showToast('info', 'Position Reset', 'Using default position for this image');
+  }
+}
+
+// ==========================================================
+// DEBOUNCE HELPERS
+// ==========================================================
+var _previewTimer = null;
+function debouncedUpdatePreview() {
+  if (!state.previewGenerated || state.uploadedFiles.length === 0) return;
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(function () { regenerateCurrentPreview(); }, 60);
+}
+
+var _genTimer = null;
+function debouncedGeneratePreview() {
+  clearTimeout(_genTimer);
+  _genTimer = setTimeout(function () { generatePreview(); }, 100);
+}
+
+// ==========================================================
+// FILE HANDLING
+// ==========================================================
+function handleDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.currentTarget) e.currentTarget.classList.add('hover');
+}
+
+function handleDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.currentTarget) e.currentTarget.classList.remove('hover');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.currentTarget) e.currentTarget.classList.remove('hover');
+  processFiles(Array.from(e.dataTransfer.files));
+}
+
+function handleFileSelect(e) {
+  processFiles(Array.from(e.target.files));
+  e.target.value = '';
+}
+
+async function processFiles(files) {
+  var valid = files.filter(function (f) {
+    if (f.size > CONFIG.maxFileSize) {
+      showToast('warning', 'File Too Large', f.name + ' exceeds 100 MB limit');
+      return false;
+    }
+    return true;
+  });
+  if (valid.length === 0) return;
+
+  var needsProcessing = valid.some(function (f) {
+    var lower = f.name.toLowerCase();
+    return lower.endsWith('.heic') || lower.endsWith('.heif') || lower.endsWith('.zip');
+  });
+  if (needsProcessing) {
+    var overlay = $('#processing-overlay');
+    if (overlay) overlay.style.display = 'flex';
+  }
+
+  try {
+    for (var i = 0; i < valid.length; i++) {
+      var f = valid[i];
+      var lower = f.name.toLowerCase();
+      if (lower.endsWith('.zip')) {
+        await handleZipFile(f);
+      } else if (lower.endsWith('.heic') || lower.endsWith('.heif')) {
+        await handleHeicFile(f);
+      } else {
+        await handleRegularFile(f, false);
+      }
+    }
+    updateCounts();
+    showToast('success', 'Files Uploaded', valid.length + ' file(s) ready for processing');
+  } catch (err) {
+    showToast('error', 'Processing Error', 'Some files could not be processed');
+  } finally {
+    var ov = $('#processing-overlay');
+    if (ov) ov.style.display = 'none';
+  }
+}
+
+async function handleZipFile(file) {
+  try {
+    var zip = await JSZip.loadAsync(file);
+    var imgFiles = [];
+    var paths = Object.keys(zip.files);
+    for (var i = 0; i < paths.length; i++) {
+      var path = paths[i];
+      if (zip.files[path].dir || !isImageFile(path)) continue;
+      var blob = await zip.files[path].async('blob');
+      var fname = path.split('/').pop();
+      imgFiles.push(new File([blob], fname, { type: getMimeType(fname) }));
+    }
+    for (var j = 0; j < imgFiles.length; j++) {
+      await handleRegularFile(imgFiles[j], true);
+    }
+    if (imgFiles.length > 0) {
+      showToast('success', 'ZIP Extracted', imgFiles.length + ' images extracted');
+    }
+  } catch (err) {
+    showToast('error', 'ZIP Error', 'Could not extract images from ZIP');
+  }
+}
+
+async function handleHeicFile(file) {
+  try {
+    var buf = await file.arrayBuffer();
+    var blob = await heic2any({ blob: new Blob([buf]), toType: 'image/jpeg', quality: 0.9 });
+    var jpegFile = new File(
+      [blob],
+      file.name.replace(/\.hei[cf]$/i, '.jpg'),
+      { type: 'image/jpeg' }
+    );
+    await handleRegularFile(jpegFile, true);
+    showToast('success', 'HEIC Converted', file.name + ' → JPEG');
+  } catch (err) {
+    showToast('error', 'Conversion Error', 'Could not convert ' + file.name);
+  }
+}
+
+function handleRegularFile(file, converted) {
+  return new Promise(function (resolve) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        state.uploadedFiles.push({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          width: img.width,
+          height: img.height,
+          url: e.target.result,
+          converted: !!converted,
+          customPosition: null
+        });
+        addFileToList({
+          name: file.name,
+          size: formatFileSize(file.size),
+          converted: !!converted
+        });
+        resolve();
+      };
+      img.onerror = function () { resolve(); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function () { resolve(); };
+    reader.readAsDataURL(file);
+  });
+}
+
+function handleUrlAdd() {
+  var textarea = $('#image-url-input');
+  if (!textarea) return;
+  var urls = textarea.value.trim().split('\n').filter(function (u) { return u.trim(); });
+  if (urls.length === 0) {
+    showToast('warning', 'No URLs', 'Enter at least one image URL');
+    return;
+  }
+  var loaded = 0;
+  var total = urls.length;
+  urls.forEach(function (rawUrl) {
+    var cleanUrl = rawUrl.trim();
+    try { new URL(cleanUrl); } catch (e) { loaded++; return; }
+    fetch(cleanUrl)
+      .then(function (r) { if (!r.ok) throw new Error('fetch failed'); return r.blob(); })
+      .then(function (blob) {
+        var fn = cleanUrl.split('/').pop() || ('image-' + Date.now() + '.jpg');
+        return handleRegularFile(new File([blob], fn, { type: blob.type || 'image/jpeg' }), false);
+      })
+      .then(function () {
+        loaded++;
+        if (loaded === total) {
+          updateCounts();
+          showToast('success', 'URLs Loaded', loaded + ' image(s) loaded');
+          textarea.value = '';
+        }
+      })
+      .catch(function () { loaded++; });
+  });
+}
+
+function switchUploadMethod(method) {
+  $$('.upload-method-btn').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.method === method);
+  });
+  var filesUp = $('#files-upload');
+  var urlUp = $('#url-upload');
+  if (filesUp) filesUp.style.display = method === 'files' ? 'block' : 'none';
+  if (urlUp) urlUp.style.display = method === 'url' ? 'block' : 'none';
+}
+
+// ==========================================================
+// UI UPDATES
+// ==========================================================
+function addFileToList(file) {
+  var list = $('#file-list');
+  if (!list) return;
+  var item = document.createElement('div');
+  item.className = 'file-item' + (file.converted ? ' converted' : '');
+  item.setAttribute('data-filename', file.name);
+  item.innerHTML =
+    '<div class="file-icon' + (file.converted ? ' converted' : '') + '"><i class="fas fa-image"></i></div>' +
+    '<div class="file-info">' +
+      '<div class="file-name">' + escapeHtml(file.name) +
+        (file.converted ? '<span class="converted-badge">Converted</span>' : '') +
+      '</div>' +
+      '<div class="file-size">' + file.size + '</div>' +
+    '</div>' +
+    '<button class="remove-file" title="Remove"><i class="fas fa-times"></i></button>';
+  var rmBtn = item.querySelector('.remove-file');
+  rmBtn.addEventListener('click', function () { removeFile(file.name); });
+  list.appendChild(item);
+}
+
+function removeFile(fileName) {
+  state.uploadedFiles = state.uploadedFiles.filter(function (f) { return f.name !== fileName; });
+  var list = $('#file-list');
+  if (list) {
+    var el = list.querySelector('[data-filename="' + CSS.escape(fileName) + '"]');
+    if (el) el.remove();
+  }
+  updateCounts();
+  if (state.uploadedFiles.length === 0) resetPreview();
+}
+
+function updateCounts() {
+  var c = state.uploadedFiles.length;
+  var fc = $('#file-count');
+  if (fc) fc.textContent = String(c);
+  var pc = $('#process-count');
+  if (pc) pc.textContent = String(c);
+  var pb = $('#process-btn');
+  if (pb) pb.disabled = c === 0;
+}
+
+// ==========================================================
+// PREVIEW GENERATION
+// ==========================================================
+async function generatePreview() {
+  if (state.uploadedFiles.length === 0) {
+    showToast('warning', 'No Images', 'Please upload images first');
+    return;
+  }
+
+  var canvas = $('#preview-canvas');
+  var placeholder = $('#preview-placeholder');
+  var loading = $('#preview-loading');
+  var bar = $('#preview-bar');
+  var actions = $('#preview-actions');
+  var enlargeBtn = $('#enlarge-preview');
+
+  if (placeholder) placeholder.style.display = 'none';
+  if (loading) loading.style.display = 'block';
+
+  try {
+    state.processedPreviews = [];
+    state.currentPreviewIndex = 0;
+
+    for (var i = 0; i < state.uploadedFiles.length; i++) {
+      await generateSinglePreview(i);
+    }
+
+    displayPreviewImage();
+
+    if (loading) loading.style.display = 'none';
+    if (canvas) canvas.style.display = 'block';
+    if (bar) bar.style.display = 'flex';
+    if (actions) actions.style.display = 'flex';
+    if (enlargeBtn) enlargeBtn.style.display = 'flex';
+
+    state.previewGenerated = true;
+    updateCounts();
+  } catch (err) {
+    if (loading) loading.style.display = 'none';
+    if (placeholder) placeholder.style.display = 'block';
+    showToast('error', 'Preview Error', 'Could not generate preview');
+  }
+}
+
+function generateSinglePreview(idx) {
+  return new Promise(function (resolve) {
+    var fileData = state.uploadedFiles[idx];
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+      var cv = document.createElement('canvas');
+      var ctx = cv.getContext('2d');
+      var scale = Math.min(1, CONFIG.previewMaxDim / Math.max(img.width, img.height));
+      cv.width = img.width * scale;
+      cv.height = img.height * scale;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      if (state.selectedWatermark) {
+        drawWatermarkOnCanvas(ctx, cv, idx);
+      }
+      state.processedPreviews[idx] = { canvas: cv, name: fileData.name, index: idx };
+      resolve();
+    };
+    img.onerror = function () { resolve(); };
+    img.src = fileData.url;
+  });
+}
+
+function regenerateCurrentPreview() {
+  if (!state.previewGenerated || state.uploadedFiles.length === 0) return;
+  var idx = state.currentPreviewIndex;
+  generateSinglePreview(idx).then(function () { displayPreviewImage(); });
+}
+
+// ==========================================================
+// WATERMARK DRAWING
+// ==========================================================
+function drawWatermarkOnCanvas(ctx, canvas, fileIdx) {
+  var wm = state.selectedWatermark;
+  if (!wm) return;
+
+  var opacityEl = $('#opacity-slider');
+  var sizeEl = $('#size-slider');
+  var opacity = parseInt(opacityEl ? opacityEl.value : '40', 10) / 100;
+  var size = parseInt(sizeEl ? sizeEl.value : '35', 10) / 100;
+
+  var aspectRatio = wm.naturalWidth / wm.naturalHeight;
+  var maxDim = Math.min(canvas.width, canvas.height) * size;
+  var wmW, wmH;
+  if (aspectRatio > 1) {
+    wmW = maxDim;
+    wmH = maxDim / aspectRatio;
+  } else {
+    wmH = maxDim;
+    wmW = maxDim * aspectRatio;
+  }
+
+  var fileData = state.uploadedFiles[fileIdx];
+  var pos;
+
+  if (fileData && fileData.customPosition) {
+    // Per-image custom position (fraction-based)
+    var cx = fileData.customPosition.xFrac * canvas.width;
+    var cy = fileData.customPosition.yFrac * canvas.height;
+    pos = { x: cx - wmW / 2, y: cy - wmH / 2 };
+    // Clamp within bounds
+    pos.x = Math.max(0, Math.min(canvas.width - wmW, pos.x));
+    pos.y = Math.max(0, Math.min(canvas.height - wmH, pos.y));
+  } else {
+    var posEl = $('#position-select');
+    var position = (posEl ? posEl.value : 'center').toLowerCase().replace(/[-_\s]/g, '-');
+    pos = getWatermarkPosition(canvas, wmW, wmH, position);
+  }
+
+  ctx.globalAlpha = opacity;
+  ctx.drawImage(wm, pos.x, pos.y, wmW, wmH);
+  ctx.globalAlpha = 1.0;
+}
+
+function getWatermarkPosition(canvas, wmW, wmH, position) {
+  var pad = Math.min(canvas.width, canvas.height) * 0.03;
+  switch (position) {
+    case 'top-left':     return { x: pad, y: pad };
+    case 'top-right':    return { x: canvas.width - wmW - pad, y: pad };
+    case 'bottom-left':  return { x: pad, y: canvas.height - wmH - pad };
+    case 'bottom-right': return { x: canvas.width - wmW - pad, y: canvas.height - wmH - pad };
+    case 'center':
+    default:             return { x: (canvas.width - wmW) / 2, y: (canvas.height - wmH) / 2 };
+  }
+}
+
+// ==========================================================
+// PREVIEW DISPLAY & NAVIGATION
+// ==========================================================
+function displayPreviewImage() {
+  var canvas = $('#preview-canvas');
+  if (!canvas || state.processedPreviews.length === 0) return;
+
+  var idx = state.currentPreviewIndex;
+  var current = state.processedPreviews[idx];
+  if (!current) return;
+
+  canvas.width = current.canvas.width;
+  canvas.height = current.canvas.height;
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(current.canvas, 0, 0);
+
+  // Update file info
+  var fn = $('#preview-file-name');
+  if (fn) fn.textContent = current.name;
+  var counter = $('#preview-counter');
+  if (counter) counter.textContent = (idx + 1) + ' / ' + state.processedPreviews.length;
+
+  // Navigation buttons
+  var prevBtn = $('#prev-image');
+  var nextBtn = $('#next-image');
+  if (prevBtn) prevBtn.disabled = idx === 0;
+  if (nextBtn) nextBtn.disabled = idx === state.processedPreviews.length - 1;
+
+  // Placement badge
+  var badge = $('#placement-status');
+  var fileData = state.uploadedFiles[idx];
+  if (badge && fileData) {
+    if (fileData.customPosition) {
+      badge.textContent = 'Custom';
+      badge.className = 'placement-badge badge-custom';
+    } else {
+      badge.textContent = 'Default';
+      badge.className = 'placement-badge';
+    }
+  }
+
+  // Reset button visibility
+  var resetBtn = $('#reset-position');
+  if (resetBtn && fileData) {
+    resetBtn.style.display = fileData.customPosition ? 'inline-flex' : 'none';
+  }
+
+  updateFullscreenInfo();
+}
+
+function navigatePreview(direction) {
+  var newIdx = state.currentPreviewIndex + direction;
+  if (newIdx >= 0 && newIdx < state.processedPreviews.length) {
+    state.currentPreviewIndex = newIdx;
+    displayPreviewImage();
+  }
+}
+
+function resetPreview() {
+  var canvas = $('#preview-canvas');
+  var placeholder = $('#preview-placeholder');
+  var bar = $('#preview-bar');
+  var actions = $('#preview-actions');
+  var enlargeBtn = $('#enlarge-preview');
+
+  if (canvas) {
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.style.display = 'none';
+  }
+  if (placeholder) placeholder.style.display = 'block';
+  if (bar) bar.style.display = 'none';
+  if (actions) actions.style.display = 'none';
+  if (enlargeBtn) enlargeBtn.style.display = 'none';
+
+  state.processedPreviews = [];
+  state.currentPreviewIndex = 0;
+  state.previewGenerated = false;
+}
+
+// ==========================================================
+// FULLSCREEN MODAL
+// ==========================================================
+function openFullscreen() {
+  if (state.processedPreviews.length === 0) return;
+  var modal = $('#fullscreen-modal');
+  if (modal) {
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+  displayFullscreenImage();
+}
+
+function closeFullscreen() {
+  var modal = $('#fullscreen-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+}
+
+function displayFullscreenImage() {
+  var canvas = $('#fullscreen-canvas');
+  if (!canvas || state.processedPreviews.length === 0) return;
+  var current = state.processedPreviews[state.currentPreviewIndex];
+  if (!current) return;
+
+  canvas.width = current.canvas.width;
+  canvas.height = current.canvas.height;
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(current.canvas, 0, 0);
+  updateFullscreenInfo();
+}
+
+function navigateFullscreen(direction) {
+  var newIdx = state.currentPreviewIndex + direction;
+  if (newIdx >= 0 && newIdx < state.processedPreviews.length) {
+    state.currentPreviewIndex = newIdx;
+    displayFullscreenImage();
+    displayPreviewImage();
+  }
+}
+
+function updateFullscreenInfo() {
+  if (state.processedPreviews.length === 0) return;
+  var current = state.processedPreviews[state.currentPreviewIndex];
+  var fn = $('#fullscreen-filename');
+  var counter = $('#fullscreen-counter');
+  if (fn && current) fn.textContent = current.name;
+  if (counter) counter.textContent = (state.currentPreviewIndex + 1) + ' / ' + state.processedPreviews.length;
+
+  var prevBtn = $('#fullscreen-prev');
+  var nextBtn = $('#fullscreen-next');
+  if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
+  if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
+}
+
+// ==========================================================
+// BATCH PROCESS & ZIP DOWNLOAD
+// ==========================================================
+async function processAllImages() {
+  if (state.uploadedFiles.length === 0) {
+    showToast('warning', 'No Images', 'Upload images first');
+    return;
+  }
+
+  // Generate previews if not yet done
+  if (!state.previewGenerated) {
+    await generatePreview();
+  }
+
+  var processBtn = $('#process-btn');
+  var btnText = processBtn ? processBtn.querySelector('.btn-text') : null;
+  var btnLoader = processBtn ? processBtn.querySelector('.btn-loader') : null;
+  var downloadSection = $('#download-section');
+  var downloadLink = $('#download-link');
+
+  // Processing state
+  state.isProcessing = true;
+  if (processBtn) processBtn.disabled = true;
+  if (btnText) btnText.style.visibility = 'hidden';
+  if (btnLoader) btnLoader.style.display = 'flex';
+  if (downloadSection) downloadSection.style.display = 'none';
+
+  try {
+    var zip = new JSZip();
+
+    for (var i = 0; i < state.uploadedFiles.length; i++) {
+      var fileData = state.uploadedFiles[i];
+      var fileIdx = i; // capture for closure
+      await new Promise(function (resolve) {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function () {
+          var cv = document.createElement('canvas');
+          var ctx = cv.getContext('2d');
+          // Full resolution
+          cv.width = img.width;
+          cv.height = img.height;
+          ctx.clearRect(0, 0, cv.width, cv.height);
+          ctx.drawImage(img, 0, 0);
+          if (state.selectedWatermark) {
+            drawWatermarkOnCanvas(ctx, cv, fileIdx);
+          }
+          cv.toBlob(function (blob) {
+            var origName = fileData.name.replace(/\.[^/.]+$/, '');
+            zip.file(origName + '-watermarked.jpg', blob);
+            resolve();
+          }, 'image/jpeg', CONFIG.quality);
+        };
+        img.onerror = function () { resolve(); };
+        img.src = fileData.url;
+      });
+    }
+
+    var zipBlob = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 }
+    });
+    var url = URL.createObjectURL(zipBlob);
+
+    if (downloadLink) {
+      downloadLink.href = url;
+      downloadLink.download = 'watermarked-images-' + Date.now() + '.zip';
+    }
+    if (downloadSection) downloadSection.style.display = 'block';
+    showToast('success', 'Done!', state.uploadedFiles.length + ' images processed');
+  } catch (err) {
+    showToast('error', 'Processing Error', 'Failed to process images');
+  } finally {
+    state.isProcessing = false;
+    if (processBtn) processBtn.disabled = false;
+    if (btnText) btnText.style.visibility = 'visible';
+    if (btnLoader) btnLoader.style.display = 'none';
+  }
+}
+
+// ==========================================================
+// ADVANCED / CUSTOM WATERMARK UPLOAD
+// ==========================================================
+function toggleAdvancedSection() {
+  var section = $('#advanced-watermark-section');
+  var toggle = $('#advanced-toggle');
+  if (!section || !toggle) return;
+  var isHidden = section.style.display === 'none';
+  section.style.display = isHidden ? 'block' : 'none';
+  var icon = toggle.querySelector('.fas');
+  if (icon) {
+    icon.classList.toggle('fa-chevron-down', !isHidden);
+    icon.classList.toggle('fa-chevron-up', isHidden);
+  }
+}
+
+function handleCustomWatermarkUpload(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('warning', 'Invalid File', 'Please select an image file');
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    var img = new Image();
+    img.onload = function () {
+      state.selectedWatermark = img;
+      var preview = $('#watermark-preview');
+      var placeholder = $('#watermark-placeholder');
+      if (preview) { preview.src = ev.target.result; preview.style.display = 'block'; }
+      if (placeholder) placeholder.style.display = 'none';
+      if (state.uploadedFiles.length > 0 && state.previewGenerated) {
+        generatePreview();
+      }
+      showToast('success', 'Custom Watermark', 'Applied successfully');
+    };
+    img.onerror = function () {
+      showToast('error', 'Upload Failed', 'Could not load watermark');
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ==========================================================
+// HELP MODAL
+// ==========================================================
+function openHelpModal() {
+  var m = $('#help-modal');
+  if (m) {
+    m.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+}
+
+function closeHelpModal() {
+  var m = $('#help-modal');
+  if (m) {
+    m.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+}
