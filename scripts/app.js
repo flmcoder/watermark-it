@@ -581,7 +581,7 @@ function drawWatermarkOnCanvas(ctx, canvas) {
     if (!watermark) return;
 
     let position = ($('#position-select')?.value || 'center').toLowerCase().replace(/[-_\s]/g, '-');
-    const opacity = parseInt($('#opacity-slider')?.value || 75, 10) / 100;
+    const opacity = parseInt($('#opacity-slider')?.value || 22, 5) / 100;
     const size = parseInt($('#size-slider')?.value || 50, 10) / 100;
 
     const maxSize = Math.min(canvas.width, canvas.height) * size;
@@ -837,7 +837,7 @@ function drawWatermarkFullSize(ctx, canvas) {
     if (!watermark) return;
 
     let position = ($('#position-select')?.value || 'center').toLowerCase().replace(/[-_\s]/g, '-');
-    const opacity = parseInt($('#opacity-slider')?.value || 75, 10) / 100;
+    const opacity = parseInt($('#opacity-slider')?.value || 22, 5) / 100;
     const size = parseInt($('#size-slider')?.value || 50, 10) / 100;
 
     const maxSize = Math.min(canvas.width, canvas.height) * size;
