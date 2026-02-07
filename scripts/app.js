@@ -1,1260 +1,1366 @@
 /**
  * Watermark-It - Fort Lowell Realty Property Image Watermarking Tool
- * Updates:
- * - Per-image placement (click or drag on preview)
- * - Default size slider to 30%
- * - Keeps fast/global defaults; per-image overrides supported
- * - MLS mode: corners only; custom uploads disabled; center disallowed
- * - Opacity fix with ctx.save()/restore(), default 22%
+ * Enhanced with proper canvas clearing and live preview updates
+ * AD 2025-2026
  */
 
+// =========================================
+// GLOBAL VARIABLES
+// =========================================
+
+// Configuration
 const CONFIG = {
-  supportedFormats: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
-  maxFileSize: 100 * 1024 * 1024,
-  previewWidth: 1200,
-  previewHeight: 800,
-  quality: 0.92
+    supportedFormats: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+    maxFileSize: 100 * 1024 * 1024, // 100MB
+    previewWidth: 1200,
+    previewHeight: 800,
+    quality: 0.92,
+    watermarkMaxWidth: 200
 };
 
-const ARMLS_WATERMARKS = [
-  { name: 'For Sale Only (blk)', file: 'assets/armls/For Sale Only-blk.png' },
-  { name: 'For Sale Only (wht)', file: 'assets/armls/For Sale Only-wht.png' },
-  { name: 'For Rent Only (blk)', file: 'assets/armls/For Rent only-blk.png' },
-  { name: 'For Rent Only (wht)', file: 'assets/armls/For Rent only-wht.png' },
-  { name: 'For Sale or Rent (blk)', file: 'assets/armls/For Sale or Rent -blk.png' },
-  { name: 'For Sale or Rent (wht)', file: 'assets/armls/For Sale or Rent -wht.png' },
-  { name: 'For Sale not Rent (blk)', file: 'assets/armls/For sale not rent-blk.png' },
-  { name: 'For Sale not Rent (wht)', file: 'assets/armls/For sale not rent-wht.png' },
-  { name: 'Under Construction (blk)', file: 'assets/armls/Under-construction-FINAL-BLACK.png' },
-  { name: 'Under Construction (wht)', file: 'assets/armls/Under-construction-FINAL-WHITE.png' },
-  { name: 'To Be Built (blk)', file: 'assets/armls/to-be-built-FINAL-BLACK.png' },
-  { name: 'To Be Built (wht)', file: 'assets/armls/to-be-built-FINAL-WHITE.png' },
-  { name: 'Virtually Staged (blk)', file: 'assets/armls/Virtual Staging Watermark_BLACK.png' },
-  { name: 'Virtually Staged (wht)', file: 'assets/armls/Virtual Staging Watermark_WHITE.png' }
-};
-
+// State Management
 let state = {
-  uploadedFiles: [],
-  processedPreviews: [], // [{ baseCanvas, name, index }]
-  perImagePlacement: [], // [{type:'preset', value:'top-left'} | {type:'custom', xNorm, yNorm}] aligned by uploadedFiles index
-  currentPreviewIndex: 0,
-  selectedWatermark: null,
-  watermarkList: [],
-  baseWatermarkList: [],
-  customWatermark: null,
-  isProcessing: false,
-  isDarkMode: false,
-  previewGenerated: false,
-  isMLSMode: false
+    uploadedFiles: [],
+    processedPreviews: [],
+    currentPreviewIndex: 0,
+    selectedWatermark: null,
+    watermarkList: [],
+    customWatermark: null,
+    isProcessing: false,
+    isDarkMode: false,
+    previewGenerated: false
 };
 
-let previewJobId = 0;
-const $ = (s) => document.querySelector(s);
-const $$ = (s) => document.querySelectorAll(s);
+// DOM Elements Cache
+let $ = (selector) => document.querySelector(selector);
+let $$ = (selector) => document.querySelectorAll(selector);
 
-function debounce(func, wait) {
-  let timeout;
-  return (...args) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
-
-// For settings changes that need a redraw (not full regen)
-const requestPreviewRedraw = debounce(() => {
-  if (state.previewGenerated) displayPreviewImage();
-}, 80);
+// =========================================
+// INITIALIZATION
+// =========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  initializeApp();
-  loadWatermarks();
-  setupEventListeners();
-  checkTheme();
-  console.log('Watermark-It initialized successfully');
+    initializeApp();
+    loadWatermarks();
+    setupEventListeners();
+    checkTheme();
+    console.log('Watermark-It initialized successfully');
 });
 
 function initializeApp() {
-  preloadSampleImages();
-  updateFileCount();
-  updateProcessCount();
-
-  document.body.addEventListener('dragover', handleDragOver);
-  document.body.addEventListener('dragleave', handleDragLeave);
-  document.body.addEventListener('drop', handleDrop);
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeFullscreen();
-      closeHelpModal();
-    }
-  });
-
-  document.querySelectorAll('.modal, .fullscreen-modal').forEach(modal => {
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) {
-        closeFullscreen();
-        closeHelpModal();
-      }
+    // Preload sample images for demo if no images are uploaded
+    preloadSampleImages();
+    
+    // Initialize UI state
+    updateFileCount();
+    updateProcessCount();
+    
+    // Setup drag and drop for the entire body
+    document.body.addEventListener('dragover', handleDragOver);
+    document.body.addEventListener('dragleave', handleDragLeave);
+    document.body.addEventListener('drop', handleDrop);
+    
+    // Close modals on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeFullscreen();
+            closeHelpModal();
+        }
     });
-  });
+    
+    // Close modals on overlay click
+    document.querySelectorAll('.modal, .fullscreen-modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeFullscreen();
+                closeHelpModal();
+            }
+        });
+    });
+    
+    console.log('App initialized');
 }
 
 function preloadSampleImages() {
-  const sampleImages = [
-    { name: 'sample-property-1.jpg', url: generateSampleImage(800, 600, '#4a5568', '#2d3748', 'Property Photo 1') },
-    { name: 'sample-property-2.jpg', url: generateSampleImage(800, 600, '#2d3748', '#1a202c', 'Property Photo 2') },
-    { name: 'sample-property-3.jpg', url: generateSampleImage(800, 600, '#553c9a', '#44337a', 'Property Photo 3') }
-  ];
-  window.demoImages = sampleImages;
+    // Create sample image data for demo purposes
+    const sampleImages = [
+        {
+            name: 'sample-property-1.jpg',
+            url: generateSampleImage(800, 600, '#4a5568', '#2d3748', 'Property Photo 1')
+        },
+        {
+            name: 'sample-property-2.jpg',
+            url: generateSampleImage(800, 600, '#2d3748', '#1a202c', 'Property Photo 2')
+        },
+        {
+            name: 'sample-property-3.jpg',
+            url: generateSampleImage(800, 600, '#553c9a', '#44337a', 'Property Photo 3')
+        }
+    ];
+    
+    // Store for demo
+    window.demoImages = sampleImages;
 }
 
 function generateSampleImage(width, height, bgColor, textColor, text) {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = bgColor;
-  ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < width; i += 40) {
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, height); ctx.stroke();
-  }
-  for (let i = 0; i < height; i += 40) {
-    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(width, i); ctx.stroke();
-  }
-  ctx.fillStyle = textColor;
-  ctx.font = 'bold 48px Inter, system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, width / 2, height / 2);
-  return canvas.toDataURL('image/jpeg', 0.8);
+    // Create a canvas and return data URL for demo
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    
+    // Background
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Add some pattern
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < width; i += 40) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, height);
+        ctx.stroke();
+    }
+    for (let i = 0; i < height; i += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, i);
+        ctx.lineTo(width, i);
+        ctx.stroke();
+    }
+    
+    // Text
+    ctx.fillStyle = textColor;
+    ctx.font = 'bold 48px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, width / 2, height / 2);
+    
+    return canvas.toDataURL('image/jpeg', 0.8);
 }
+
+// =========================================
+// WATERMARK LOADING
+// =========================================
 
 async function loadWatermarks() {
-  try {
-    const response = await fetch('assets/watermarks.json');
-    if (!response.ok) throw new Error('Failed to load watermarks');
-    const data = await response.json();
-    state.watermarkList = data.watermarks || [];
-    state.baseWatermarkList = [...state.watermarkList];
-    populateWatermarkDropdown();
-    if (state.watermarkList.length > 0) selectWatermark(state.watermarkList[0].file);
-  } catch (error) {
-    console.warn('Could not load watermarks.json, using directory defaults:', error);
-    loadWatermarksFromDirectory();
-  }
+    try {
+        const response = await fetch('assets/watermarks.json');
+        if (!response.ok) throw new Error('Failed to load watermarks');
+        
+        const data = await response.json();
+        state.watermarkList = data.watermarks || [];
+        populateWatermarkDropdown();
+        
+        if (state.watermarkList.length > 0) {
+            selectWatermark(state.watermarkList[0].file);
+        }
+        
+    } catch (error) {
+        console.warn('Could not load watermarks from JSON, trying directory scan:', error);
+        loadWatermarksFromDirectory();
+    }
 }
 
-function loadWatermarksFromDirectory() {
-  const defaults = [
-    { name: 'Rounded (Default)', file: 'assets/rounded.png', default: true },
-    { name: 'Flat White Stroke', file: 'assets/Flat-white-stroke-watermark.png' },
-    { name: 'Grey', file: 'assets/grey-watermark.png' },
-    { name: 'Logo', file: 'assets/logo-watermark.png' },
-    { name: 'Logo Alt', file: 'assets/logo-watermark2.png' }
-  ];
-  state.watermarkList = defaults;
-  state.baseWatermarkList = [...defaults];
-  populateWatermarkDropdown();
-  if (state.watermarkList.length > 0) selectWatermark(state.watermarkList[0].file);
+async function loadWatermarksFromDirectory() {
+    const defaultWatermarks = [
+        { name: 'Rounded (White)', file: 'assets/watermark-rounded-white.png', default: true },
+        { name: 'Rounded (Black)', file: 'assets/watermark-rounded-black.png' },
+        { name: 'Square (White)', file: 'assets/watermark-square-white.png' },
+        { name: 'Square (Black)', file: 'assets/watermark-square-black.png' },
+        { name: 'Horizontal (White)', file: 'assets/watermark-horizontal-white.png' },
+        { name: 'Horizontal (Black)', file: 'assets/watermark-horizontal-black.png' }
+    ];
+    
+    state.watermarkList = defaultWatermarks;
+    populateWatermarkDropdown();
+    
+    if (state.watermarkList.length > 0) {
+        selectWatermark(state.watermarkList[0].file);
+    }
 }
 
 function populateWatermarkDropdown() {
-  const select = $('#watermark-select');
-  if (!select) return;
-  select.innerHTML = '';
-  state.watermarkList.forEach((wm) => {
-    const option = document.createElement('option');
-    option.value = wm.file;
-    option.textContent = wm.name;
-    if (wm.default) option.selected = true;
-    select.appendChild(option);
-  });
-  syncPositionSelectors(); // keep main/quick in sync
+    const select = $('#watermark-select');
+    if (!select) return;
+    
+    select.innerHTML = '';
+    
+    state.watermarkList.forEach((wm, index) => {
+        const option = document.createElement('option');
+        option.value = wm.file;
+        option.textContent = wm.name;
+        if (wm.default) option.selected = true;
+        select.appendChild(option);
+    });
 }
 
 function selectWatermark(url) {
-  const preview = $('#watermark-preview');
-  const placeholder = $('#watermark-placeholder');
-  if (!preview || !placeholder) return;
-
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.onload = () => {
-    state.selectedWatermark = img;
-    preview.src = url;
-    preview.alt = 'Selected Watermark';
-    preview.style.display = 'block';
-    placeholder.style.display = 'none';
-    if (state.previewGenerated) displayPreviewImage();
-  };
-  img.onerror = () => {
-    console.warn(`Failed to load watermark: ${url}`);
-    showToast('warning', 'Watermark Error', `Could not load watermark from: ${url}`);
-  };
-  img.src = url;
+    const preview = $('#watermark-preview');
+    const placeholder = $('#watermark-placeholder');
+    
+    if (!preview || !placeholder) return;
+    
+    // Clear previous state
+    state.selectedWatermark = null;
+    
+    // Create new image
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+        state.selectedWatermark = img;
+        preview.src = url;
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+        
+        // Regenerate preview if we have uploaded images
+        if (state.uploadedFiles.length > 0 && state.previewGenerated) {
+            // Debounce preview regeneration
+            clearTimeout(window.previewTimeout);
+            window.previewTimeout = setTimeout(() => {
+                generatePreview();
+            }, 100);
+        }
+    };
+    
+    img.onerror = () => {
+        console.warn(`Failed to load watermark: ${url}`);
+        showToast('warning', 'Watermark Error', `Could not load watermark from: ${url}`);
+    };
+    
+    img.src = url;
 }
+
+// =========================================
+// EVENT LISTENERS
+// =========================================
 
 function setupEventListeners() {
-  const fileInput = $('#file-input');
-  if (fileInput) fileInput.addEventListener('change', handleFileSelect);
-
-  const dropZone = $('#drop-zone');
-  if (dropZone) {
-    dropZone.addEventListener('click', () => fileInput.click());
-    dropZone.addEventListener('dragover', handleDragOver);
-    dropZone.addEventListener('dragleave', handleDragLeave);
-    dropZone.addEventListener('drop', handleDrop);
-  }
-
-  $$('.upload-method-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchUploadMethod(btn.dataset.method));
-  });
-
-  $('#add-url-btn')?.addEventListener('click', handleUrlAdd);
-  $('#image-url-input')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.ctrlKey) handleUrlAdd();
-  });
-
-  $('#watermark-select')?.addEventListener('change', (e) => {
-    if (e.target.value) selectWatermark(e.target.value);
-  });
-
-  $('#opacity-slider')?.addEventListener('input', (e) => {
-    $('#opacity-value').textContent = `${e.target.value}%`;
-    requestPreviewRedraw();
-  });
-
-  $('#size-slider')?.addEventListener('input', (e) => {
-    $('#size-value').textContent = `${e.target.value}%`;
-    requestPreviewRedraw();
-  });
-
-  $('#position-select')?.addEventListener('change', () => {
-    syncPositionSelectors('main');
-    enforceCenterRestrictionIfMLS();
-    requestPreviewRedraw();
-  });
-  $('#position-select-quick')?.addEventListener('change', () => {
-    syncPositionSelectors('quick');
-    enforceCenterRestrictionIfMLS();
-    requestPreviewRedraw();
-  });
-
-  $('#generate-preview')?.addEventListener('click', startPreviewGeneration);
-  $('#prev-image')?.addEventListener('click', () => navigatePreview(-1));
-  $('#next-image')?.addEventListener('click', () => navigatePreview(1));
-
-  $('#enlarge-preview')?.addEventListener('click', openFullscreen);
-  $('#fullscreen-close')?.addEventListener('click', closeFullscreen);
-  $('#fullscreen-prev')?.addEventListener('click', () => navigateFullscreen(-1));
-  $('#fullscreen-next')?.addEventListener('click', () => navigateFullscreen(1));
-
-  $('#process-btn')?.addEventListener('click', processAllImages);
-
-  $('#advanced-toggle')?.addEventListener('click', toggleAdvancedSection);
-
-  $('#change-watermark')?.addEventListener('click', () => $('#watermark-upload')?.click());
-  $('#watermark-upload')?.addEventListener('change', handleCustomWatermarkUpload);
-
-  $('#help-btn')?.addEventListener('click', openHelpModal);
-  $('#close-help')?.addEventListener('click', closeHelpModal);
-
-  $('#theme-toggle')?.addEventListener('click', toggleTheme);
-
-  $('#mls-toggle')?.addEventListener('change', handleMLSToggle);
-
-  $('#reset-position')?.addEventListener('click', resetPositionForCurrentImage);
-
-  document.addEventListener('keydown', handlePreviewKeyboard);
-
-  // Drag-to-place on preview canvas
-  const previewCanvas = $('#preview-canvas');
-  if (previewCanvas) {
-    ['mousedown', 'touchstart'].forEach(ev => previewCanvas.addEventListener(ev, handleDragStart, { passive: false }));
-    ['mousemove', 'touchmove'].forEach(ev => previewCanvas.addEventListener(ev, handleDragMove, { passive: false }));
-    ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(ev => previewCanvas.addEventListener(ev, handleDragEnd, { passive: false }));
-  }
+    // File input
+    const fileInput = $('#file-input');
+    if (fileInput) {
+        fileInput.addEventListener('change', handleFileSelect);
+    }
+    
+    // Drop zone
+    const dropZone = $('#drop-zone');
+    if (dropZone) {
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', handleDragOver);
+        dropZone.addEventListener('dragleave', handleDragLeave);
+        dropZone.addEventListener('drop', handleDrop);
+    }
+    
+    // Upload tabs
+    $$('.upload-method-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchUploadMethod(btn.dataset.method));
+    });
+    
+    // URL input
+    $('#add-url-btn')?.addEventListener('click', handleUrlAdd);
+    $('#image-url-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.ctrlKey) handleUrlAdd();
+    });
+    
+    // Watermark select
+    $('#watermark-select')?.addEventListener('change', (e) => {
+        if (e.target.value) selectWatermark(e.target.value);
+    });
+    
+    // Settings sliders with live preview
+    $('#opacity-slider')?.addEventListener('input', (e) => {
+        $('#opacity-value').textContent = `${e.target.value}%`;
+        updatePreviewLive();
+    });
+    
+    $('#size-slider')?.addEventListener('input', (e) => {
+        $('#size-value').textContent = `${e.target.value}%`;
+        updatePreviewLive();
+    });
+    
+    // Position select with live preview
+    $('#position-select')?.addEventListener('change', updatePreviewLive);
+    
+    // Preview button
+    $('#generate-preview')?.addEventListener('click', generatePreview);
+    
+    // Navigation buttons
+    $('#prev-image')?.addEventListener('click', () => navigatePreview(-1));
+    $('#next-image')?.addEventListener('click', () => navigatePreview(1));
+    
+    // Fullscreen buttons
+    $('#enlarge-preview')?.addEventListener('click', openFullscreen);
+    $('#fullscreen-close')?.addEventListener('click', closeFullscreen);
+    $('#fullscreen-prev')?.addEventListener('click', () => navigateFullscreen(-1));
+    $('#fullscreen-next')?.addEventListener('click', () => navigateFullscreen(1));
+    
+    // Process button
+    $('#process-btn')?.addEventListener('click', processAllImages);
+    
+    // Advanced toggle
+    $('#advanced-toggle')?.addEventListener('click', toggleAdvancedSection);
+    
+    // Custom watermark upload
+    $('#change-watermark')?.addEventListener('click', () => {
+        $('#watermark-upload')?.click();
+    });
+    
+    $('#watermark-upload')?.addEventListener('change', handleCustomWatermarkUpload);
+    
+    // Help modal
+    $('#help-btn')?.addEventListener('click', openHelpModal);
+    $('#close-help')?.addEventListener('click', closeHelpModal);
+    
+    // Theme toggle
+    $('#theme-toggle')?.addEventListener('click', toggleTheme);
+    
+    // Keyboard navigation for preview
+    document.addEventListener('keydown', handlePreviewKeyboard);
 }
 
-function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); e.currentTarget?.classList.add('hover'); }
-function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); e.currentTarget?.classList.remove('hover'); }
+// =========================================
+// FILE HANDLING
+// =========================================
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget?.classList.add('hover');
+}
+
+function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget?.classList.remove('hover');
+}
+
 function handleDrop(e) {
-  e.preventDefault(); e.stopPropagation(); e.currentTarget?.classList.remove('hover');
-  const files = Array.from(e.dataTransfer.files);
-  processFiles(files);
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget?.classList.remove('hover');
+    
+    const files = Array.from(e.dataTransfer.files);
+    processFiles(files);
 }
+
 function handleFileSelect(e) {
-  const files = Array.from(e.target.files);
-  processFiles(files);
-  e.target.value = '';
+    const files = Array.from(e.target.files);
+    processFiles(files);
+    e.target.value = ''; // Reset input
 }
 
 async function processFiles(files) {
-  const validFiles = files.filter(file => {
-    if (file.size > CONFIG.maxFileSize) {
-      showToast('warning', 'File Too Large', `${file.name} exceeds ${CONFIG.maxFileSize / 1024 / 1024}MB limit`);
-      return false;
+    const validFiles = files.filter(file => {
+        if (file.size > CONFIG.maxFileSize) {
+            showToast('warning', 'File Too Large', `${file.name} exceeds ${CONFIG.maxFileSize / 1024 / 1024}MB limit`);
+            return false;
+        }
+        return true;
+    });
+    
+    if (validFiles.length === 0) return;
+    
+    // Show processing overlay for HEIC/ZIP operations
+    const needsProcessing = validFiles.some(f => 
+        f.name.toLowerCase().endsWith('.heic') || f.name.toLowerCase().endsWith('.zip')
+    );
+    
+    if (needsProcessing) {
+        $('#processing-overlay').style.display = 'flex';
     }
-    return true;
-  });
-  if (validFiles.length === 0) return;
-
-  const needsProcessing = validFiles.some(f => f.name.toLowerCase().endsWith('.heic') || f.name.toLowerCase().endsWith('.zip'));
-  if (needsProcessing) $('#processing-overlay').style.display = 'flex';
-
-  try {
-    for (const file of validFiles) {
-      if (file.name.toLowerCase().endsWith('.zip')) {
-        await handleZipFile(file);
-      } else if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
-        await handleHeicFile(file);
-      } else {
-        await handleRegularFile(file);
-      }
+    
+    try {
+        for (const file of validFiles) {
+            if (file.name.toLowerCase().endsWith('.zip')) {
+                await handleZipFile(file);
+            } else if (file.name.toLowerCase().endsWith('.heic')) {
+                await handleHeicFile(file);
+            } else {
+                await handleRegularFile(file);
+            }
+        }
+        
+        updateFileCount();
+        showToast('success', 'Files Uploaded', `${validFiles.length} file(s) ready for processing`);
+        
+    } catch (error) {
+        console.error('Error processing files:', error);
+        showToast('error', 'Processing Error', 'Some files could not be processed');
+    } finally {
+        $('#processing-overlay').style.display = 'none';
     }
-    renderFileList();
-    updateFileCount();
-    updateProcessCount();
-    showToast('success', 'Files Uploaded', `${validFiles.length} file(s) ready for processing`);
-  } catch (error) {
-    console.error('Error processing files:', error);
-    showToast('error', 'Processing Error', 'Some files could not be processed');
-  } finally {
-    $('#processing-overlay').style.display = 'none';
-  }
 }
 
 async function handleZipFile(file) {
-  if (typeof JSZip === 'undefined') {
-    console.error('JSZip is not loaded');
-    showToast('error', 'ZIP Error', 'JSZip library is missing. Ensure it is loaded in HTML.');
-    return;
-  }
-  try {
-    const zip = await JSZip.loadAsync(file);
-    const imageFiles = [];
-
-    for (const [path, zipEntry] of Object.entries(zip.files)) {
-      if (zipEntry.dir) continue;
-      if (path.startsWith('__MACOSX') || path.split('/').some(p => p.startsWith('.') || p === '')) continue;
-      if (!isImageFile(path)) continue;
-
-      const fileName = path.split('/').pop();
-
-      if (isHeic(fileName)) {
-        if (typeof heic2any === 'undefined') {
-          console.warn('heic2any not available; skipping HEIC in ZIP');
-          showToast('warning', 'HEIC Skipped', `${fileName} skipped (missing HEIC converter).`);
-          continue;
+    try {
+        const zip = await JSZip.loadAsync(file);
+        const imageFiles = [];
+        
+        for (const [path, zipEntry] of Object.entries(zip.files)) {
+            if (zipEntry.dir || !isImageFile(path)) continue;
+            
+            const blob = await zipEntry.async('blob');
+            const fileName = path.split('/').pop();
+            const file = new File([blob], fileName, { type: getMimeType(fileName) });
+            imageFiles.push(file);
         }
-        const arrayBuffer = await zipEntry.async('arraybuffer');
-        const heicBlob = new Blob([arrayBuffer]);
-        try {
-          const jpegBlob = await heic2any({ blob: heicBlob, toType: 'image/jpeg', quality: 0.9 });
-          const jpegName = fileName.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
-          const jpegFile = new File([jpegBlob], jpegName, { type: 'image/jpeg' });
-          imageFiles.push({ file: jpegFile, converted: true });
-        } catch (err) {
-          console.error('HEIC conversion in ZIP failed:', fileName, err);
-          showToast('error', 'Conversion Error', `Could not convert ${fileName}`);
+        
+        for (const imgFile of imageFiles) {
+            await handleRegularFile(imgFile, true);
         }
-      } else {
-        const blob = await zipEntry.async('blob');
-        const fileObj = new File([blob], fileName, { type: getMimeType(fileName) });
-        imageFiles.push({ file: fileObj, converted: false });
-      }
+        
+        if (imageFiles.length > 0) {
+            showToast('success', 'ZIP Extracted', `${imageFiles.length} images extracted from ${file.name}`);
+        }
+        
+    } catch (error) {
+        console.error('Error processing ZIP:', error);
+        showToast('error', 'ZIP Error', 'Could not extract images from ZIP file');
     }
-
-    for (const img of imageFiles) {
-      await handleRegularFile(img.file, img.converted);
-    }
-
-    renderFileList();
-    if (imageFiles.length > 0) {
-      showToast('success', 'ZIP Extracted', `${imageFiles.length} image(s) extracted from ${file.name}`);
-    } else {
-      showToast('warning', 'No Images Found', `No supported images were found in ${file.name}`);
-    }
-  } catch (error) {
-    console.error('Error processing ZIP:', error);
-    showToast('error', 'ZIP Error', 'Could not extract images from ZIP file');
-  }
 }
 
 async function handleHeicFile(file) {
-  if (typeof heic2any === 'undefined') {
-    console.error('heic2any is not loaded');
-    showToast('error', 'Conversion Error', 'HEIC converter is missing. Ensure heic2any is loaded in HTML.');
-    return;
-  }
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const blob = await heic2any({ blob: new Blob([arrayBuffer]), toType: 'image/jpeg', quality: 0.9 });
-    const jpegFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
-    await handleRegularFile(jpegFile, true);
-    renderFileList();
-    showToast('success', 'HEIC Converted', `${file.name} converted to JPEG`);
-  } catch (error) {
-    console.error('HEIC conversion error:', error);
-    showToast('error', 'Conversion Error', `Could not convert ${file.name}`);
-  }
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const blob = await heic2any({ blob: new Blob([arrayBuffer]), toType: 'image/jpeg', quality: 0.9 });
+        
+        const jpegFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
+        await handleRegularFile(jpegFile, true);
+        
+        showToast('success', 'HEIC Converted', `${file.name} converted to JPEG`);
+        
+    } catch (error) {
+        console.error('HEIC conversion error:', error);
+        showToast('error', 'Conversion Error', `Could not convert ${file.name}`);
+    }
 }
 
 async function handleRegularFile(file, converted = false) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        state.uploadedFiles.push({
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          width: img.width,
-          height: img.height,
-          url: e.target.result,
-          converted: converted
-        });
-        state.perImagePlacement.push(null); // align placement array
-        resolve();
-      };
-      img.onerror = () => { console.error('Failed to load image:', file.name); resolve(); };
-      img.src = e.target.result;
-    };
-    reader.onerror = () => { console.error('Failed to read file:', file.name); resolve(); };
-    reader.readAsDataURL(file);
-  });
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            const img = new Image();
+            
+            img.onload = () => {
+                state.uploadedFiles.push({
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    width: img.width,
+                    height: img.height,
+                    url: e.target.result,
+                    converted: converted
+                });
+                
+                addFileToList({
+                    name: file.name,
+                    size: formatFileSize(file.size),
+                    converted: converted
+                });
+                
+                resolve();
+            };
+            
+            img.onerror = () => {
+                console.error('Failed to load image:', file.name);
+                resolve();
+            };
+            
+            img.src = e.target.result;
+        };
+        
+        reader.onerror = () => {
+            console.error('Failed to read file:', file.name);
+            resolve();
+        };
+        
+        reader.readAsDataURL(file);
+    });
 }
 
-function isImageFile(filename) { return /\.(jpg|jpeg|png|webp|gif|bmp|heic|heif)$/i.test(filename); }
-function isHeic(filename) { return /\.(heic|heif)$/i.test(filename); }
-function getMimeType(filename) {
-  const ext = filename.split('.').pop().toLowerCase();
-  const mimeTypes = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', heic: 'image/heic', heif: 'image/heif' };
-  return mimeTypes[ext] || 'image/jpeg';
+function isImageFile(filename) {
+    return /\.(jpg|jpeg|png|webp|gif|bmp|heic|heif)$/i.test(filename);
 }
+
+function getMimeType(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    const mimeTypes = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'webp': 'image/webp',
+        'gif': 'image/gif',
+        'bmp': 'image/bmp',
+        'heic': 'image/heic',
+        'heif': 'image/heif'
+    };
+    return mimeTypes[ext] || 'image/jpeg';
+}
+
 function formatFileSize(bytes) {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024, sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 function handleUrlAdd() {
-  const textarea = $('#image-url-input');
-  if (!textarea) return;
-  const urls = textarea.value.trim().split('\n').filter(url => url.trim());
-  if (urls.length === 0) {
-    showToast('warning', 'No URLs', 'Please enter at least one image URL');
-    return;
-  }
-  let loadedCount = 0;
-  const totalUrls = urls.length;
-  urls.forEach(url => {
-    const cleanUrl = url.trim();
-    try { new URL(cleanUrl); } catch { console.warn('Invalid URL:', cleanUrl); loadedCount++; return; }
-    fetch(cleanUrl)
-      .then(response => { if (!response.ok) throw new Error('Failed to fetch'); return response.blob(); })
-      .then(blob => {
-        const fileName = cleanUrl.split('/').pop() || `image-${Date.now()}.jpg`;
-        const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
-        return handleRegularFile(file);
-      })
-      .then(() => {
-        loadedCount++;
-        if (loadedCount === totalUrls) {
-          renderFileList();
-          updateFileCount();
-          updateProcessCount();
-          showToast('success', 'URLs Loaded', `${loadedCount} image(s) loaded from URLs`);
-          textarea.value = '';
+    const textarea = $('#image-url-input');
+    if (!textarea) return;
+    
+    const urls = textarea.value.trim().split('\n').filter(url => url.trim());
+    
+    if (urls.length === 0) {
+        showToast('warning', 'No URLs', 'Please enter at least one image URL');
+        return;
+    }
+    
+    let loadedCount = 0;
+    const totalUrls = urls.length;
+    
+    urls.forEach(url => {
+        const cleanUrl = url.trim();
+        
+        // Validate URL
+        try {
+            new URL(cleanUrl);
+        } catch {
+            console.warn('Invalid URL:', cleanUrl);
+            return;
         }
-      })
-      .catch(error => { console.error('Error loading URL:', cleanUrl, error); loadedCount++; });
-  });
+        
+        // Fetch and load image
+        fetch(cleanUrl)
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to fetch');
+                return response.blob();
+            })
+            .then(blob => {
+                const fileName = cleanUrl.split('/').pop() || `image-${Date.now()}.jpg`;
+                const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+                return handleRegularFile(file);
+            })
+            .then(() => {
+                loadedCount++;
+                if (loadedCount === totalUrls) {
+                    showToast('success', 'URLs Loaded', `${loadedCount} image(s) loaded from URLs`);
+                    textarea.value = '';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading URL:', cleanUrl, error);
+                loadedCount++;
+            });
+    });
 }
 
 function switchUploadMethod(method) {
-  $$('.upload-method-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.method === method));
-  $('#files-upload').style.display = method === 'files' ? 'block' : 'none';
-  $('#url-upload').style.display = method === 'url' ? 'block' : 'none';
+    $$('.upload-method-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.method === method);
+    });
+    
+    $('#files-upload').style.display = method === 'files' ? 'block' : 'none';
+    $('#url-upload').style.display = method === 'url' ? 'block' : 'none';
 }
 
-function renderFileList() {
-  const fileList = $('#file-list');
-  if (!fileList) return;
-  fileList.innerHTML = '';
-  state.uploadedFiles.forEach((file, idx) => {
-    const item = document.createElement('div');
-    item.className = `file-item${file.converted ? ' converted' : ''}`;
-    item.innerHTML = `
-      <div class="file-icon${file.converted ? ' converted' : ''}">
-        <i class="fas fa-image"></i>
-      </div>
-      <div class="file-info">
-        <div class="file-name">${escapeHtml(file.name)}${file.converted ? '<span class="converted-badge">Converted</span>' : ''}</div>
-        <div class="file-size">${formatFileSize(file.size)}</div>
-      </div>
-      <button class="remove-file" data-index="${idx}">
-        <i class="fas fa-times"></i>
-      </button>
+// =========================================
+// UI UPDATES
+// =========================================
+
+function addFileToList(file) {
+    const fileList = $('#file-list');
+    if (!fileList) return;
+    
+    const fileItem = document.createElement('div');
+    fileItem.className = `file-item${file.converted ? ' converted' : ''}`;
+    fileItem.innerHTML = `
+        <div class="file-icon${file.converted ? ' converted' : ''}">
+            <i class="fas fa-image"></i>
+        </div>
+        <div class="file-info">
+            <div class="file-name">${escapeHtml(file.name)}${file.converted ? '<span class="converted-badge">Converted</span>' : ''}</div>
+            <div class="file-size">${file.size}</div>
+        </div>
+        <button class="remove-file" onclick="removeFile('${escapeHtml(file.name)}')">
+            <i class="fas fa-times"></i>
+        </button>
     `;
-    item.querySelector('.remove-file').addEventListener('click', () => removeFileByIndex(idx));
-    fileList.appendChild(item);
-  });
+    
+    fileList.appendChild(fileItem);
 }
 
-function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
-function removeFileByIndex(idx) {
-  if (idx < 0 || idx >= state.uploadedFiles.length) return;
-  state.uploadedFiles.splice(idx, 1);
-  state.perImagePlacement.splice(idx, 1);
-  renderFileList();
-  updateFileCount();
-  updateProcessCount();
-  if (state.uploadedFiles.length === 0) {
-    resetPreview();
-  } else {
-    // Re-run preview generation to rebuild base canvases
-    state.previewGenerated = false;
-    startPreviewGeneration();
-  }
+function removeFile(fileName) {
+    state.uploadedFiles = state.uploadedFiles.filter(f => f.name !== fileName);
+    
+    const fileList = $('#file-list');
+    if (fileList) {
+        const items = fileList.querySelectorAll('.file-item');
+        items.forEach(item => {
+            if (item.querySelector('.file-name').textContent.includes(fileName)) {
+                item.remove();
+            }
+        });
+    }
+    
+    updateFileCount();
+    updateProcessCount();
+    
+    if (state.uploadedFiles.length === 0) {
+        resetPreview();
+    }
 }
 
 function updateFileCount() {
-  const count = state.uploadedFiles.length;
-  $('#file-count').textContent = count;
-  const processBtn = $('#process-btn');
-  if (processBtn) processBtn.disabled = count === 0;
+    const count = state.uploadedFiles.length;
+    $('#file-count').textContent = count;
+    
+    const processBtn = $('#process-btn');
+    if (processBtn) {
+        processBtn.disabled = count === 0;
+    }
 }
 
 function updateProcessCount() {
-  const count = state.uploadedFiles.length;
-  $('#process-count').textContent = count;
-  const processBtn = $('#process-btn');
-  if (processBtn) processBtn.disabled = count === 0;
+    const count = state.uploadedFiles.length;
+    $('#process-count').textContent = count;
+    
+    // Enable/disable process button
+    const processBtn = $('#process-btn');
+    if (processBtn) {
+        processBtn.disabled = count === 0;
+    }
 }
 
 function updateSteps() {
-  const steps = $$('.step');
-  let activeStep = 0;
-  if (state.uploadedFiles.length > 0) activeStep = 1;
-  if (state.selectedWatermark) activeStep = Math.max(activeStep, 2);
-  if (state.previewGenerated) activeStep = Math.max(activeStep, 4);
-  steps.forEach((step, index) => step.classList.toggle('active', index < activeStep));
-}
-
-function startPreviewGeneration() {
-  if (state.uploadedFiles.length === 0) {
-    showToast('warning', 'No Images', 'Please upload images first');
-    return;
-  }
-  const jobId = ++previewJobId;
-  generatePreview(jobId);
-}
-
-async function generatePreview(jobId) {
-  const canvas = $('#preview-canvas');
-  const placeholder = $('#preview-placeholder');
-  const loading = $('#preview-loading');
-  const previewInfo = $('#preview-info');
-  const enlargeBtn = $('#enlarge-preview');
-  if (!canvas || !placeholder) return;
-
-  state.previewGenerated = false;
-
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.width;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  canvas.style.display = 'none';
-
-  placeholder.style.display = 'none';
-  if (loading) loading.style.display = 'flex';
-
-  state.processedPreviews = [];
-  state.currentPreviewIndex = 0;
-
-  try {
-    await processPreviewsSequentially(jobId);
-    if (jobId !== previewJobId) return;
-
-    if (loading) loading.style.display = 'none';
-    canvas.style.display = 'block';
-    if (previewInfo) previewInfo.style.display = 'flex';
-    if (enlargeBtn) enlargeBtn.style.display = 'flex';
-
-    state.previewGenerated = true;
-    updateSteps();
-    displayPreviewImage();
-  } catch (error) {
-    console.error('Preview generation error:', error);
-    showToast('error', 'Preview Error', 'Could not generate preview');
-    if (loading) loading.style.display = 'none';
-    placeholder.style.display = 'flex';
-  }
-}
-
-async function processPreviewsSequentially(jobId) {
-  state.processedPreviews = [];
-  for (let i = 0; i < state.uploadedFiles.length; i++) {
-    const fileData = state.uploadedFiles[i];
-    if (jobId !== previewJobId) return;
-
-    await new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const scale = Math.min(1, CONFIG.previewWidth / img.width, CONFIG.previewHeight / img.height);
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        state.processedPreviews.push({ baseCanvas: canvas, name: fileData.name, index: i });
-        resolve();
-      };
-      img.onerror = () => { console.error('Failed to load image:', fileData.name); resolve(); };
-      img.src = fileData.url;
+    const steps = $$('.step');
+    let activeStep = 0;
+    
+    if (state.uploadedFiles.length > 0) activeStep = 1;
+    if (state.selectedWatermark) activeStep = Math.max(activeStep, 2);
+    if (state.previewGenerated) activeStep = Math.max(activeStep, 4);
+    
+    steps.forEach((step, index) => {
+        step.classList.toggle('active', index < activeStep);
     });
-  }
 }
 
-function getWatermarkSize(canvas) {
-  const watermark = state.selectedWatermark;
-  if (!watermark) return { wmWidth: 0, wmHeight: 0 };
-  const size = parseInt($('#size-slider')?.value || 30, 10) / 100;
-  const maxSize = Math.min(canvas.width, canvas.height) * size;
-  const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
-  let wmWidth, wmHeight;
-  if (aspectRatio > 1) {
-    wmWidth = maxSize;
-    wmHeight = maxSize / aspectRatio;
-  } else {
-    wmHeight = maxSize;
-    wmWidth = maxSize * aspectRatio;
-  }
-  return { wmWidth, wmHeight };
+// =========================================
+// PREVIEW GENERATION
+// =========================================
+
+// KEY FIX: Live preview update function that clears canvas properly
+function updatePreviewLive() {
+    // Only update if we have generated a preview and have uploaded files
+    if (!state.previewGenerated || state.uploadedFiles.length === 0) return;
+    
+    // Debounce to avoid excessive redraws
+    clearTimeout(window.livePreviewTimeout);
+    window.livePreviewTimeout = setTimeout(() => {
+        generatePreview();
+    }, 50);
 }
 
-function getPlacementForImage(idx, canvas) {
-  // Returns a placement object
-  const placement = state.perImagePlacement[idx];
-  const base = (selectorValueOrDefault()).toLowerCase().replace(/[-_\s]/g, '-');
-
-  const isMLS = state.isMLSMode;
-  const allowed = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-
-  if (isMLS) {
-    // MLS: enforce corner
-    if (placement && placement.type === 'preset' && allowed.includes(placement.value)) {
-      return placement;
+async function generatePreview() {
+    if (state.uploadedFiles.length === 0) {
+        showToast('warning', 'No Images', 'Please upload images first');
+        return;
     }
-    // snap any custom or center to nearest corner
-    return { type: 'preset', value: snapToCorner(base) };
-  }
-
-  if (placement) {
-    return placement;
-  }
-  return { type: 'preset', value: base };
+    
+    const canvas = $('#preview-canvas');
+    const placeholder = $('#preview-placeholder');
+    const loading = $('#preview-loading');
+    const previewInfo = $('#preview-info');
+    const enlargeBtn = $('#enlarge-preview');
+    
+    if (!canvas || !placeholder) return;
+    
+    // Show loading state
+    placeholder.style.display = 'none';
+    if (loading) loading.style.display = 'flex';
+    
+    try {
+        // Reset processed previews
+        state.processedPreviews = [];
+        state.currentPreviewIndex = 0;
+        
+        // Process all images
+        await processPreviewsSequentially();
+        
+        // Display first preview
+        displayPreviewImage();
+        
+        // Update UI
+        if (loading) loading.style.display = 'none';
+        canvas.style.display = 'block';
+        if (previewInfo) previewInfo.style.display = 'flex';
+        if (enlargeBtn) enlargeBtn.style.display = 'flex';
+        
+        state.previewGenerated = true;
+        updateSteps();
+        
+    } catch (error) {
+        console.error('Preview generation error:', error);
+        showToast('error', 'Preview Error', 'Could not generate preview');
+        if (loading) loading.style.display = 'none';
+        placeholder.style.display = 'flex';
+    }
 }
 
-function selectorValueOrDefault() {
-  const main = $('#position-select');
-  return main?.value || 'center';
+async function processPreviewsSequentially() {
+    for (let i = 0; i < state.uploadedFiles.length; i++) {
+        const fileData = state.uploadedFiles[i];
+        
+        await new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            img.onload = () => {
+                // Create canvas for this preview
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Calculate dimensions (max 1200px width while maintaining aspect ratio)
+                const maxWidth = CONFIG.previewWidth;
+                const scale = Math.min(1, maxWidth / img.width);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                
+                // KEY FIX: Clear the canvas before drawing - this prevents layering
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw the base image
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                // Draw watermark if selected
+                if (state.selectedWatermark) {
+                    drawWatermarkOnCanvas(ctx, canvas);
+                }
+                
+                // Store the result
+                state.processedPreviews.push({
+                    canvas: canvas,
+                    name: fileData.name,
+                    index: i
+                });
+                
+                resolve();
+            };
+            
+            img.onerror = () => {
+                console.error('Failed to load image:', fileData.name);
+                resolve();
+            };
+            
+            img.src = fileData.url;
+        });
+    }
 }
 
-function snapToCorner(position) {
-  const allowed = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-  if (allowed.includes(position)) return position;
-  // default
-  return 'bottom-right';
+function drawWatermarkOnCanvas(ctx, canvas) {
+    const watermark = state.selectedWatermark;
+    if (!watermark) return;
+    
+    // Get the position value and normalize it (handle hyphens, underscores, spaces)
+    const positionSelect = $('#position-select');
+    let position = positionSelect?.value || 'center';
+    
+    // Normalize the position value to match our switch cases
+    position = position.toLowerCase().replace(/[-_\s]/g, '-');
+    
+    const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
+    const size = parseInt($('#size-slider')?.value || 50) / 100;
+    
+    // Calculate watermark dimensions
+    const maxSize = Math.min(canvas.width, canvas.height) * size;
+    const aspectRatio = watermark.naturalWidth / watermark.naturalHeight;
+    
+    let wmWidth, wmHeight;
+    if (aspectRatio > 1) {
+        wmWidth = maxSize;
+        wmHeight = maxSize / aspectRatio;
+    } else {
+        wmHeight = maxSize;
+        wmWidth = maxSize * aspectRatio;
+    }
+    
+    // Calculate position
+    const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
+    
+    // Apply opacity and draw
+    ctx.globalAlpha = opacity;
+    ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
+    ctx.globalAlpha = 1.0; // Reset to default
 }
 
 function getWatermarkPosition(canvas, wmWidth, wmHeight, position) {
-  const padding = 20;
-  let x, y;
-  switch (position) {
-    case 'top-left': x = padding; y = padding; break;
-    case 'top-right': x = canvas.width - wmWidth - padding; y = padding; break;
-    case 'bottom-left': x = padding; y = canvas.height - wmHeight - padding; break;
-    case 'bottom-right': x = canvas.width - wmWidth - padding; y = canvas.height - wmHeight - padding; break;
-    case 'center':
-    default:
-      x = (canvas.width - wmWidth) / 2;
-      y = (canvas.height - wmHeight) / 2;
-      break;
-  }
-  return { x, y };
-}
-
-function drawWatermarkWithPlacement(ctx, canvas, placement) {
-  const watermark = state.selectedWatermark;
-  if (!watermark) return;
-
-  const opacity = parseInt($('#opacity-slider')?.value || 22, 10) / 100;
-  const { wmWidth, wmHeight } = getWatermarkSize(canvas);
-
-  let x, y;
-  if (placement.type === 'preset') {
-    const pos = placement.value;
-    const adjusted = state.isMLSMode && pos === 'center' ? 'bottom-right' : pos;
-    ({ x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, adjusted));
-  } else {
-    // custom normalized
-    x = placement.xNorm * canvas.width;
-    y = placement.yNorm * canvas.height;
-    // clamp
-    x = Math.min(Math.max(0, x), canvas.width - wmWidth);
-    y = Math.min(Math.max(0, y), canvas.height - wmHeight);
-  }
-
-  ctx.save();
-  ctx.globalAlpha = opacity;
-  ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
-  ctx.restore();
+    const padding = 20;
+    let x, y;
+    
+    switch (position) {
+        case 'top-left':
+            x = padding;
+            y = padding;
+            break;
+            
+        case 'top-right':
+            x = canvas.width - wmWidth - padding;
+            y = padding;
+            break;
+            
+        case 'bottom-left':
+            x = padding;
+            y = canvas.height - wmHeight - padding;
+            break;
+            
+        case 'bottom-right':
+            x = canvas.width - wmWidth - padding;
+            y = canvas.height - wmHeight - padding;
+            break;
+            
+        case 'center':
+        default:
+            x = (canvas.width - wmWidth) / 2;
+            y = (canvas.height - wmHeight) / 2;
+            break;
+    }
+    
+    return { x, y };
 }
 
 function displayPreviewImage() {
-  const canvas = $('#preview-canvas');
-  const fileName = $('#preview-file-name');
-  const counter = $('#preview-counter');
-  const placementBadge = $('#placement-status');
-  const resetBtn = $('#reset-position');
-  if (!canvas || state.processedPreviews.length === 0) return;
-
-  const currentPreview = state.processedPreviews[state.currentPreviewIndex];
-
-  canvas.width = currentPreview.baseCanvas.width;
-  canvas.height = currentPreview.baseCanvas.height;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // draw base image
-  ctx.drawImage(currentPreview.baseCanvas, 0, 0);
-
-  // draw watermark with current placement
-  const placement = getPlacementForImage(currentPreview.index, canvas);
-  if (state.selectedWatermark) {
-    drawWatermarkWithPlacement(ctx, canvas, placement);
-  }
-
-  if (fileName) fileName.textContent = currentPreview.name;
-  if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
-
-  updatePreviewNavigation();
-  updateFullscreenInfo();
-
-  updatePlacementStatusUI(placementBadge, resetBtn, placement);
-}
-
-function updatePlacementStatusUI(badgeEl, resetBtn, placement) {
-  if (!badgeEl) return;
-  if (placement.type === 'custom') {
-    badgeEl.textContent = 'Custom (per-image)';
-    badgeEl.classList.add('badge-custom');
-    if (resetBtn) resetBtn.style.display = 'inline-flex';
-  } else {
-    badgeEl.textContent = 'Default';
-    badgeEl.classList.remove('badge-custom');
-    if (resetBtn) resetBtn.style.display = 'none';
-  }
+    const canvas = $('#preview-canvas');
+    const previewInfo = $('#preview-info');
+    const fileName = $('#preview-file-name');
+    const counter = $('#preview-counter');
+    
+    if (!canvas || state.processedPreviews.length === 0) return;
+    
+    const currentPreview = state.processedPreviews[state.currentPreviewIndex];
+    
+    // Clear the canvas and draw the current preview
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(currentPreview.canvas, 0, 0);
+    
+    // Update canvas size to match preview
+    canvas.width = currentPreview.canvas.width;
+    canvas.height = currentPreview.canvas.height;
+    
+    // Re-draw after resize
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(currentPreview.canvas, 0, 0);
+    
+    // Update info
+    if (fileName) fileName.textContent = currentPreview.name;
+    if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
+    
+    // Update navigation buttons
+    updatePreviewNavigation();
+    
+    // Update fullscreen info
+    updateFullscreenInfo();
 }
 
 function updatePreviewNavigation() {
-  const prevBtn = $('#prev-image');
-  const nextBtn = $('#next-image');
-  const counter = $('#preview-counter');
-  if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
-  if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
-  if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
+    const prevBtn = $('#prev-image');
+    const nextBtn = $('#next-image');
+    const counter = $('#preview-counter');
+    
+    if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
+    if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
+    if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
 }
 
 function navigatePreview(direction) {
-  const newIndex = state.currentPreviewIndex + direction;
-  if (newIndex >= 0 && newIndex < state.processedPreviews.length) {
-    state.currentPreviewIndex = newIndex;
-    displayPreviewImage();
-  }
+    const newIndex = state.currentPreviewIndex + direction;
+    
+    if (newIndex >= 0 && newIndex < state.processedPreviews.length) {
+        state.currentPreviewIndex = newIndex;
+        displayPreviewImage();
+    }
 }
 
 function resetPreview() {
-  const canvas = $('#preview-canvas');
-  const placeholder = $('#preview-placeholder');
-  const loading = $('#preview-loading');
-  const previewInfo = $('#preview-info');
-  const enlargeBtn = $('#enlarge-preview');
-
-  if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); canvas.style.display = 'none'; }
-  if (placeholder) placeholder.style.display = 'flex';
-  if (loading) loading.style.display = 'none';
-  if (previewInfo) previewInfo.style.display = 'none';
-  if (enlargeBtn) enlargeBtn.style.display = 'none';
-
-  state.processedPreviews = [];
-  state.currentPreviewIndex = 0;
-  state.previewGenerated = false;
-  updateSteps();
+    const canvas = $('#preview-canvas');
+    const placeholder = $('#preview-placeholder');
+    const loading = $('#preview-loading');
+    const previewInfo = $('#preview-info');
+    const enlargeBtn = $('#enlarge-preview');
+    
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.style.display = 'none';
+    }
+    
+    if (placeholder) placeholder.style.display = 'flex';
+    if (loading) loading.style.display = 'none';
+    if (previewInfo) previewInfo.style.display = 'none';
+    if (enlargeBtn) enlargeBtn.style.display = 'none';
+    
+    state.processedPreviews = [];
+    state.currentPreviewIndex = 0;
+    state.previewGenerated = false;
+    updateSteps();
 }
 
+// =========================================
+// FULLSCREEN PREVIEW
+// =========================================
+
 function openFullscreen() {
-  if (state.processedPreviews.length === 0) return;
-  const modal = $('#fullscreen-modal');
-  if (!modal) return;
-  modal.classList.add('active');
-  document.body.style.overflow = 'hidden';
-  displayFullscreenImage();
+    if (state.processedPreviews.length === 0) return;
+    
+    const modal = $('#fullscreen-modal');
+    if (!modal) return;
+    
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    displayFullscreenImage();
 }
 
 function closeFullscreen() {
-  const modal = $('#fullscreen-modal');
-  if (modal) {
-    modal.classList.remove('active');
-    document.body.style.overflow = '';
-  }
+    const modal = $('#fullscreen-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
 }
 
 function displayFullscreenImage() {
-  const canvas = $('#fullscreen-canvas');
-  if (!canvas || state.processedPreviews.length === 0) return;
-
-  const currentPreview = state.processedPreviews[state.currentPreviewIndex];
-  canvas.width = currentPreview.baseCanvas.width;
-  canvas.height = currentPreview.baseCanvas.height;
-
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(currentPreview.baseCanvas, 0, 0);
-
-  const placement = getPlacementForImage(currentPreview.index, canvas);
-  if (state.selectedWatermark) {
-    drawWatermarkWithPlacement(ctx, canvas, placement);
-  }
-
-  fitCanvasToContainer(canvas);
-  updateFullscreenInfo();
+    const canvas = $('#fullscreen-canvas');
+    const modal = $('#fullscreen-modal');
+    
+    if (!canvas || !modal || state.processedPreviews.length === 0) return;
+    
+    const currentPreview = state.processedPreviews[state.currentPreviewIndex];
+    
+    // Copy to fullscreen canvas
+    canvas.width = currentPreview.canvas.width;
+    canvas.height = currentPreview.canvas.height;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(currentPreview.canvas, 0, 0);
+    
+    // Fit to container
+    fitCanvasToContainer(canvas);
+    updateFullscreenInfo();
 }
 
 function fitCanvasToContainer(canvas) {
-  const container = $('#fullscreen-modal .fullscreen-content');
-  if (!container) return;
-  const containerRect = container.getBoundingClientRect();
-  const padding = 40;
-  const maxWidth = containerRect.width - padding * 2;
-  const maxHeight = containerRect.height - padding * 2 - 60;
-  const scale = Math.min(1, maxWidth / canvas.width, maxHeight / canvas.height);
-  canvas.style.width = `${canvas.width * scale}px`;
-  canvas.style.height = `${canvas.height * scale}px`;
+    const container = $('#fullscreen-modal .fullscreen-content');
+    if (!container) return;
+    
+    const containerRect = container.getBoundingClientRect();
+    const padding = 40;
+    
+    const maxWidth = containerRect.width - padding * 2;
+    const maxHeight = containerRect.height - padding * 2 - 60; // Account for info bar
+    
+    const scale = Math.min(1, maxWidth / canvas.width, maxHeight / canvas.height);
+    
+    canvas.style.width = `${canvas.width * scale}px`;
+    canvas.style.height = `${canvas.height * scale}px`;
 }
 
 function navigateFullscreen(direction) {
-  const newIndex = state.currentPreviewIndex + direction;
-  if (newIndex >= 0 && newIndex < state.processedPreviews.length) {
-    state.currentPreviewIndex = newIndex;
-    displayFullscreenImage();
-  }
+    const newIndex = state.currentPreviewIndex + direction;
+    
+    if (newIndex >= 0 && newIndex < state.processedPreviews.length) {
+        state.currentPreviewIndex = newIndex;
+        displayFullscreenImage();
+    }
 }
 
 function updateFullscreenInfo() {
-  const filename = $('#fullscreen-filename');
-  const counter = $('#fullscreen-counter');
-  const prevBtn = $('#fullscreen-prev');
-  const nextBtn = $('#fullscreen-next');
-
-  if (state.processedPreviews.length > 0) {
-    const currentPreview = state.processedPreviews[state.currentPreviewIndex];
-    if (filename) filename.textContent = currentPreview.name;
-    if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
-  }
-  if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
-  if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
+    const filename = $('#fullscreen-filename');
+    const counter = $('#fullscreen-counter');
+    const prevBtn = $('#fullscreen-prev');
+    const nextBtn = $('#fullscreen-next');
+    
+    if (state.processedPreviews.length > 0) {
+        const currentPreview = state.processedPreviews[state.currentPreviewIndex];
+        if (filename) filename.textContent = currentPreview.name;
+        if (counter) counter.textContent = `${state.currentPreviewIndex + 1} / ${state.processedPreviews.length}`;
+    }
+    
+    if (prevBtn) prevBtn.disabled = state.currentPreviewIndex === 0;
+    if (nextBtn) nextBtn.disabled = state.currentPreviewIndex === state.processedPreviews.length - 1;
 }
 
 function handlePreviewKeyboard(e) {
-  const modal = $('#fullscreen-modal');
-  if (modal?.classList.contains('active')) {
+    const modal = $('#fullscreen-modal');
+    if (!modal?.classList.contains('active')) return;
+    
     switch (e.key) {
-      case 'ArrowLeft': navigateFullscreen(-1); break;
-      case 'ArrowRight': navigateFullscreen(1); break;
-      case 'Escape': closeFullscreen(); break;
+        case 'ArrowLeft':
+            navigateFullscreen(-1);
+            break;
+        case 'ArrowRight':
+            navigateFullscreen(1);
+            break;
+        case 'Escape':
+            closeFullscreen();
+            break;
     }
-  }
 }
+
+// =========================================
+// IMAGE PROCESSING & DOWNLOAD
+// =========================================
 
 async function processAllImages() {
-  if (state.uploadedFiles.length === 0) {
-    showToast('warning', 'No Images', 'Please upload images first');
-    return;
-  }
-  if (!state.previewGenerated) {
-    await startPreviewGeneration();
-  }
-
-  const processBtn = $('#process-btn');
-  const btnText = processBtn?.querySelector('.btn-text');
-  const btnLoader = processBtn?.querySelector('.btn-loader');
-  const downloadSection = $('#download-section');
-  const downloadLink = $('#download-link');
-  if (!processBtn) return;
-
-  state.isProcessing = true;
-  processBtn.disabled = true;
-  if (btnText) btnText.style.visibility = 'hidden';
-  if (btnLoader) btnLoader.style.display = 'flex';
-  if (downloadSection) downloadSection.style.display = 'none';
-
-  try {
-    const zip = new JSZip();
-    for (let i = 0; i < state.uploadedFiles.length; i++) {
-      const fileData = state.uploadedFiles[i];
-      await new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0);
-
-          if (state.selectedWatermark) {
-            const placement = getPlacementForImage(i, canvas);
-            drawWatermarkFullSize(ctx, canvas, placement);
-          }
-
-          canvas.toBlob((blob) => {
-            const originalName = fileData.name.replace(/\.[^/.]+$/, '');
-            const newName = `${originalName}-watermarked.jpg`;
-            zip.file(newName, blob);
-            resolve();
-          }, 'image/jpeg', CONFIG.quality);
-        };
-        img.onerror = () => { console.error('Failed to process:', fileData.name); resolve(); };
-        img.src = fileData.url;
-      });
+    if (state.uploadedFiles.length === 0) {
+        showToast('warning', 'No Images', 'Please upload images first');
+        return;
     }
-    const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-    const url = URL.createObjectURL(zipBlob);
-    if (downloadLink) {
-      downloadLink.href = url;
-      downloadLink.download = `watermarked-images-${Date.now()}.zip`;
+    
+    // Generate preview first if not done
+    if (!state.previewGenerated) {
+        await generatePreview();
     }
-    if (downloadSection) downloadSection.style.display = 'block';
-    showToast('success', 'Processing Complete', `${state.uploadedFiles.length} images processed successfully`);
-  } catch (error) {
-    console.error('Processing error:', error);
-    showToast('error', 'Processing Error', 'Failed to process images');
-  } finally {
-    state.isProcessing = false;
-    processBtn.disabled = false;
-    if (btnText) btnText.style.visibility = 'visible';
-    if (btnLoader) btnLoader.style.display = 'none';
-  }
+    
+    const processBtn = $('#process-btn');
+    const btnText = processBtn?.querySelector('.btn-text');
+    const btnLoader = processBtn?.querySelector('.btn-loader');
+    const downloadSection = $('#download-section');
+    const downloadLink = $('#download-link');
+    
+    if (!processBtn) return;
+    
+    // Show processing state
+    state.isProcessing = true;
+    processBtn.disabled = true;
+    if (btnText) btnText.style.visibility = 'hidden';
+    if (btnLoader) btnLoader.style.display = 'flex';
+    if (downloadSection) downloadSection.style.display = 'none';
+    
+    try {
+        const zip = new JSZip();
+        
+        // Process each image
+        for (let i = 0; i < state.uploadedFiles.length; i++) {
+            const fileData = state.uploadedFiles[i];
+            const preview = state.processedPreviews[i];
+            
+            // Create final canvas
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            await new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                
+                img.onload = () => {
+                    // Use original image dimensions for full quality
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // Clear and draw
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Apply watermark if available
+                    if (state.selectedWatermark) {
+                        drawWatermarkFullSize(ctx, canvas);
+                    }
+                    
+                    // Convert to blob
+                    canvas.toBlob((blob) => {
+                        // Generate filename
+                        const originalName = fileData.name.replace(/\.[^/.]+$/, '');
+                        const newName = `${originalName}-watermarked.jpg`;
+                        
+                        zip.file(newName, blob);
+                        resolve();
+                    }, 'image/jpeg', CONFIG.quality);
+                };
+                
+                img.onerror = () => {
+                    console.error('Failed to process:', fileData.name);
+                    resolve();
+                };
+                
+                img.src = fileData.url;
+            });
+        }
+        
+        // Generate ZIP
+        const zipBlob = await zip.generateAsync({
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+        
+        // Create download
+        const url = URL.createObjectURL(zipBlob);
+        if (downloadLink) {
+            downloadLink.href = url;
+            downloadLink.download = `watermarked-images-${Date.now()}.zip`;
+        }
+        
+        // Show download section
+        if (downloadSection) downloadSection.style.display = 'block';
+        
+        showToast('success', 'Processing Complete', `${state.uploadedFiles.length} images processed successfully`);
+        
+    } catch (error) {
+        console.error('Processing error:', error);
+        showToast('error', 'Processing Error', 'Failed to process images');
+    } finally {
+        // Reset button state
+        state.isProcessing = false;
+        processBtn.disabled = false;
+        if (btnText) btnText.style.visibility = 'visible';
+        if (btnLoader) btnLoader.style.display = 'none';
+    }
 }
 
-function drawWatermarkFullSize(ctx, canvas, placement) {
-  const watermark = state.selectedWatermark;
-  if (!watermark) return;
-
-  const opacity = parseInt($('#opacity-slider')?.value || 22, 10) / 100;
-  const { wmWidth, wmHeight } = getWatermarkSize(canvas);
-
-  let x, y;
-  if (placement.type === 'preset') {
-    const pos = placement.value;
-    const adjusted = state.isMLSMode && pos === 'center' ? 'bottom-right' : pos;
-    ({ x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, adjusted));
-  } else {
-    x = placement.xNorm * canvas.width;
-    y = placement.yNorm * canvas.height;
-    x = Math.min(Math.max(0, x), canvas.width - wmWidth);
-    y = Math.min(Math.max(0, y), canvas.height - wmHeight);
-  }
-
-  ctx.save();
-  ctx.globalAlpha = opacity;
-  ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
-  ctx.restore();
+function drawWatermarkFullSize(ctx, canvas) {
+    const watermark = state.selectedWatermark;
+    if (!watermark) return;
+    
+    // Get the position value and normalize it
+    const positionSelect = $('#position-select');
+    let position = positionSelect?.value || 'center';
+    
+    // Normalize the position value to match our switch cases
+    position = position.toLowerCase().replace(/[-_\s]/g, '-');
+    
+    const opacity = parseInt($('#opacity-slider')?.value || 75) / 100;
+    const size = parseInt($('#size-slider')?.value || 50) / 100;
+    
+    let wmWidth, wmHeight;
+    if (aspectRatio > 1) {
+        wmWidth = maxSize;
+        wmHeight = maxSize / aspectRatio;
+    } else {
+        wmHeight = maxSize;
+        wmWidth = maxSize * aspectRatio;
+    }
+    
+    // Calculate position
+    const { x, y } = getWatermarkPosition(canvas, wmWidth, wmHeight, position);
+    
+    // Apply and draw
+    ctx.globalAlpha = opacity;
+    ctx.drawImage(watermark, x, y, wmWidth, wmHeight);
+    ctx.globalAlpha = 1.0;
 }
+
+// =========================================
+// ADVANCED OPTIONS
+// =========================================
 
 function toggleAdvancedSection() {
-  const section = $('#advanced-watermark-section');
-  const toggle = $('#advanced-toggle');
-  if (!section || !toggle) return;
-  const isHidden = section.style.display === 'none';
-  section.style.display = isHidden ? 'block' : 'none';
-  const icon = toggle.querySelector('.fas');
-  if (icon) {
-    icon.classList.toggle('fa-chevron-down', !isHidden);
-    icon.classList.toggle('fa-chevron-up', isHidden);
-  }
+    const section = $('#advanced-watermark-section');
+    const toggle = $('#advanced-toggle');
+    
+    if (!section || !toggle) return;
+    
+    const isHidden = section.style.display === 'none';
+    section.style.display = isHidden ? 'block' : 'none';
+    
+    const icon = toggle.querySelector('.fas');
+    if (icon) {
+        icon.classList.toggle('fa-chevron-down', !isHidden);
+        icon.classList.toggle('fa-chevron-up', isHidden);
+    }
 }
 
 function handleCustomWatermarkUpload(e) {
-  if (state.isMLSMode) {
-    showToast('warning', 'Not allowed in MLS mode', 'Custom watermarks are disabled under ARMLS compliance.');
-    e.target.value = '';
-    return;
-  }
-  const file = e.target.files[0];
-  if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    showToast('warning', 'Invalid File', 'Please select an image file');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    const preview = $('#watermark-preview');
-    const placeholder = $('#watermark-placeholder');
-    if (!preview || !placeholder) return;
-    const img = new Image();
-    img.onload = () => {
-      state.customWatermark = img;
-      state.selectedWatermark = img;
-      preview.src = event.target.result;
-      preview.style.display = 'block';
-      placeholder.style.display = 'none';
-      if (state.previewGenerated) displayPreviewImage();
-      showToast('success', 'Watermark Uploaded', 'Custom watermark applied successfully');
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        showToast('warning', 'Invalid File', 'Please select an image file');
+        return;
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = (event) => {
+        const preview = $('#watermark-preview');
+        const placeholder = $('#watermark-placeholder');
+        
+        if (!preview || !placeholder) return;
+        
+        const img = new Image();
+        img.onload = () => {
+            state.customWatermark = img;
+            state.selectedWatermark = img;
+            
+            preview.src = event.target.result;
+            preview.style.display = 'block';
+            placeholder.style.display = 'none';
+            
+            // Regenerate preview if we have uploaded images
+            if (state.uploadedFiles.length > 0 && state.previewGenerated) {
+                generatePreview();
+            }
+            
+            showToast('success', 'Watermark Uploaded', 'Custom watermark applied successfully');
+        };
+        
+        img.onerror = () => {
+            showToast('error', 'Upload Failed', 'Could not load custom watermark');
+        };
+        
+        img.src = event.target.result;
     };
-    img.onerror = () => showToast('error', 'Upload Failed', 'Could not load custom watermark');
-    img.src = event.target.result;
-  };
-  reader.onerror = () => showToast('error', 'Read Error', 'Could not read file');
-  reader.readAsDataURL(file);
+    
+    reader.onerror = () => {
+        showToast('error', 'Read Error', 'Could not read file');
+    };
+    
+    reader.readAsDataURL(file);
 }
 
-function handleMLSToggle(e) {
-  state.isMLSMode = e.target.checked;
-  const advWrapper = $('#advanced-wrapper');
-  const advSection = $('#advanced-watermark-section');
-
-  if (state.isMLSMode) {
-    state.watermarkList = [...ARMLS_WATERMARKS];
-    populateWatermarkDropdown();
-    selectWatermark(state.watermarkList[0]?.file);
-    if (advWrapper) advWrapper.style.display = 'none';
-    if (advSection) advSection.style.display = 'none';
-    enforceCenterRestrictionIfMLS();
-    applyMLSPlacementRestrictions();
-    showToast('info', 'MLS Mode', 'ARMLS-approved watermarks only. Custom uploads disabled. Center placement is not allowed.');
-  } else {
-    state.watermarkList = [...state.baseWatermarkList];
-    populateWatermarkDropdown();
-    selectWatermark(state.watermarkList[0]?.file);
-    if (advWrapper) advWrapper.style.display = 'block';
-  }
-  if (state.previewGenerated) displayPreviewImage();
-}
-
-function enforceCenterRestrictionIfMLS() {
-  if (!state.isMLSMode) return;
-  const fallback = 'bottom-right';
-  const main = $('#position-select');
-  const quick = $('#position-select-quick');
-  if (main && main.value === 'center') main.value = fallback;
-  if (quick && quick.value === 'center') quick.value = fallback;
-}
-
-function applyMLSPlacementRestrictions() {
-  if (!state.isMLSMode) return;
-  const allowed = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-  state.perImagePlacement = state.perImagePlacement.map((p) => {
-    if (!p) return { type: 'preset', value: 'bottom-right' };
-    if (p.type === 'custom') return { type: 'preset', value: 'bottom-right' };
-    if (p.type === 'preset' && !allowed.includes(p.value)) return { type: 'preset', value: 'bottom-right' };
-    return p;
-  });
-}
-
-function forceNonCenterPosition() {
-  const main = $('#position-select');
-  const quick = $('#position-select-quick');
-  const fallback = 'bottom-right';
-  if (main && main.value === 'center') main.value = fallback;
-  if (quick && quick.value === 'center') quick.value = fallback;
-}
-
-function syncPositionSelectors(source = 'main') {
-  const main = $('#position-select');
-  const quick = $('#position-select-quick');
-  if (!main || !quick) return;
-  if (source === 'main') {
-    quick.value = main.value;
-  } else {
-    main.value = quick.value;
-  }
-}
+// =========================================
+// HELP MODAL
+// =========================================
 
 function openHelpModal() {
-  const modal = $('#help-modal');
-  if (modal) { modal.classList.add('active'); document.body.style.overflow = 'hidden'; }
+    const modal = $('#help-modal');
+    if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
 }
 
 function closeHelpModal() {
-  const modal = $('#help-modal');
-  if (modal) { modal.classList.remove('active'); document.body.style.overflow = ''; }
+    const modal = $('#help-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
 }
 
+// =========================================
+// THEME TOGGLE
+// =========================================
+
 function toggleTheme() {
-  state.isDarkMode = !state.isDarkMode;
-  document.body.classList.toggle('dark-mode', state.isDarkMode);
-  const themeBtn = $('#theme-toggle');
-  if (themeBtn) {
-    const icon = themeBtn.querySelector('.fas');
-    if (icon) {
-      icon.classList.toggle('fa-moon', !state.isDarkMode);
-      icon.classList.toggle('fa-sun', state.isDarkMode);
+    state.isDarkMode = !state.isDarkMode;
+    document.body.classList.toggle('dark-mode', state.isDarkMode);
+    
+    const themeBtn = $('#theme-toggle');
+    if (themeBtn) {
+        const icon = themeBtn.querySelector('.fas');
+        if (icon) {
+            icon.classList.toggle('fa-moon', !state.isDarkMode);
+            icon.classList.toggle('fa-sun', state.isDarkMode);
+        }
     }
-  }
-  localStorage.setItem('theme', state.isDarkMode ? 'dark' : 'light');
+    
+    localStorage.setItem('theme', state.isDarkMode ? 'dark' : 'light');
 }
 
 function checkTheme() {
-  const savedTheme = localStorage.getItem('theme');
-  if (savedTheme === 'dark') {
-    state.isDarkMode = true;
-    document.body.classList.add('dark-mode');
-    const themeBtn = $('#theme-toggle');
-    if (themeBtn) {
-      const icon = themeBtn.querySelector('.fas');
-      if (icon) { icon.classList.remove('fa-moon'); icon.classList.add('fa-sun'); }
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        state.isDarkMode = true;
+        document.body.classList.add('dark-mode');
+        const themeBtn = $('#theme-toggle');
+        if (themeBtn) {
+            const icon = themeBtn.querySelector('.fas');
+            if (icon) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            }
+        }
     }
-  }
 }
 
+// =========================================
+// TOAST NOTIFICATIONS
+// =========================================
+
 function showToast(type, title, message) {
-  const container = $('#toast-container');
-  if (!container) return;
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  const icons = {
-    success: 'fa-check-circle',
-    warning: 'fa-exclamation-triangle',
-    error: 'fa-times-circle',
-    info: 'fa-info-circle',
-    conversion: 'fa-file-image'
-  };
-  toast.innerHTML = `
-    <div class="toast-icon"><i class="fas ${icons[type] || icons.info}"></i></div>
-    <div class="toast-content">
-      <div class="toast-title">${escapeHtml(title)}</div>
-      <div class="toast-message">${escapeHtml(message)}</div>
-    </div>
-    <button class="toast-close"><i class="fas fa-times"></i></button>
-  `;
-  container.appendChild(toast);
-  toast.querySelector('.toast-close')?.addEventListener('click', () => removeToast(toast));
-  const timeout = setTimeout(() => removeToast(toast), 5000);
-  toast.dataset.timeout = timeout;
-  requestAnimationFrame(() => { toast.style.animation = 'toastSlideIn 0.3s ease-out'; });
+    const container = $('#toast-container');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    const icons = {
+        success: 'fa-check-circle',
+        warning: 'fa-exclamation-triangle',
+        error: 'fa-times-circle',
+        info: 'fa-info-circle',
+        conversion: 'fa-file-image'
+    };
+    
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i class="fas ${icons[type] || icons.info}"></i>
+        </div>
+        <div class="toast-content">
+            <div class="toast-title">${escapeHtml(title)}</div>
+            <div class="toast-message">${escapeHtml(message)}</div>
+        </div>
+        <button class="toast-close">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Setup close button
+    toast.querySelector('.toast-close')?.addEventListener('click', () => {
+        removeToast(toast);
+    });
+    
+    // Auto remove
+    const timeout = setTimeout(() => removeToast(toast), 5000);
+    toast.dataset.timeout = timeout;
+    
+    // Slide in animation
+    requestAnimationFrame(() => {
+        toast.style.animation = 'toastSlideIn 0.3s ease-out';
+    });
 }
 
 function removeToast(toast) {
-  if (!toast) return;
-  clearTimeout(parseInt(toast.dataset.timeout));
-  toast.style.animation = 'toastSlideOut 0.3s ease-in forwards';
-  toast.addEventListener('animationend', () => { toast.remove(); });
+    if (!toast) return;
+    
+    clearTimeout(parseInt(toast.dataset.timeout));
+    toast.style.animation = 'toastSlideOut 0.3s ease-in forwards';
+    
+    toast.addEventListener('animationend', () => {
+        toast.remove();
+    });
 }
 
-// --- Drag-to-place logic ---
-let dragState = { active: false };
+// =========================================
+// UTILITY FUNCTIONS
+// =========================================
 
-function getPointerPosition(e, canvas) {
-  const rect = canvas.getBoundingClientRect();
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-  return { x: clientX - rect.left, y: clientY - rect.top };
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }
 
-function handleDragStart(e) {
-  if (!state.previewGenerated || !state.selectedWatermark) return;
-  e.preventDefault();
-  const canvas = $('#preview-canvas');
-  if (!canvas) return;
-  const { x, y } = getPointerPosition(e, canvas);
-  updatePlacementFromPointer(x, y, canvas);
-  dragState.active = true;
-}
-
-function handleDragMove(e) {
-  if (!dragState.active) return;
-  if (!state.previewGenerated || !state.selectedWatermark) return;
-  e.preventDefault();
-  const canvas = $('#preview-canvas');
-  if (!canvas) return;
-  const { x, y } = getPointerPosition(e, canvas);
-  updatePlacementFromPointer(x, y, canvas);
-}
-
-function handleDragEnd(e) {
-  if (dragState.active) {
-    e.preventDefault();
-  }
-  dragState.active = false;
-}
-
-function updatePlacementFromPointer(pointerX, pointerY, canvas) {
-  const idx = state.currentPreviewIndex;
-  const fileIndex = state.processedPreviews[idx]?.index ?? idx;
-  const { wmWidth, wmHeight } = getWatermarkSize(canvas);
-  if (wmWidth === 0 || wmHeight === 0) return;
-
-  // center the watermark on pointer
-  let x = pointerX - wmWidth / 2;
-  let y = pointerY - wmHeight / 2;
-
-  // clamp
-  x = Math.min(Math.max(0, x), canvas.width - wmWidth);
-  y = Math.min(Math.max(0, y), canvas.height - wmHeight);
-
-  if (state.isMLSMode) {
-    // snap to nearest corner
-    const corner = nearestCorner(x, y, canvas, wmWidth, wmHeight);
-    state.perImagePlacement[fileIndex] = { type: 'preset', value: corner };
-  } else {
-    const xNorm = x / canvas.width;
-    const yNorm = y / canvas.height;
-    state.perImagePlacement[fileIndex] = { type: 'custom', xNorm, yNorm };
-  }
-
-  displayPreviewImage();
-}
-
-function nearestCorner(x, y, canvas, w, h) {
-  const corners = {
-    'top-left': { x: 0, y: 0 },
-    'top-right': { x: canvas.width - w, y: 0 },
-    'bottom-left': { x: 0, y: canvas.height - h },
-    'bottom-right': { x: canvas.width - w, y: canvas.height - h }
-  };
-  let best = 'bottom-right';
-  let bestDist = Infinity;
-  Object.entries(corners).forEach(([name, pt]) => {
-    const dx = x - pt.x;
-    const dy = y - pt.y;
-    const dist = dx * dx + dy * dy;
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = name;
-    }
-  });
-  return best;
-}
-
-function resetPositionForCurrentImage() {
-  const idx = state.currentPreviewIndex;
-  const fileIndex = state.processedPreviews[idx]?.index ?? idx;
-  state.perImagePlacement[fileIndex] = null;
-  displayPreviewImage();
-}
-
-// Expose for inline handlers (legacy)
+// Make functions globally accessible
+window.removeFile = removeFile;
 window.openHelpModal = openHelpModal;
 window.closeHelpModal = closeHelpModal;
 window.toggleTheme = toggleTheme;
