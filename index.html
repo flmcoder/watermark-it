@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Watermark-It - The Easy Tool For Property Photos
-  </title>
+  <title>Watermark-It - The Easy Tool For Property Photos</title>
   <meta name="description" content="Professional real estate image watermarking tool with live preview, batch processing, and modern glassmorphism interface by Fort Lowell Realty & Property Management.">
   <meta name="keywords" content="watermark, real estate, image processing, Fort Lowell Realty, property photos, batch processing">
 
@@ -35,7 +34,7 @@
   <!-- Toast Container -->
   <div id="toast-container" class="toast-container"></div>
 
-  <!-- Page Processing Overlay (persistent during HEIC/ZIP import) -->
+  <!-- Page Processing Overlay -->
   <div id="processing-overlay" class="processing-overlay" style="display: none;">
     <div class="processing-box glass-effect">
       <div class="processing-spinner">
@@ -146,8 +145,8 @@
                   <div class="file-types">
                     <span class="file-type">JPG</span>
                     <span class="file-type">PNG</span>
-                    <span class="file-type">WebP</span>
                     <span class="file-type heic-supported">HEIC</span>
+                    <span class="file-type">WebP</span>
                     <span class="file-type">ZIP</span>
                   </div>
                 </div>
@@ -155,7 +154,7 @@
               </div>
             </div>
 
-            <!-- URL Upload - Multiple URLs -->
+            <!-- URL Upload -->
             <div id="url-upload" class="upload-section" style="display: none;">
               <div class="url-input-container glass-inner">
                 <textarea id="image-url-input"
@@ -184,6 +183,22 @@
           </div>
 
           <div class="settings-content">
+            <!-- MLS Toggle -->
+            <div class="setting-group">
+              <label class="setting-label">
+                <span><i class="fas fa-gavel"></i> MLS (ARMLS) compliance</span>
+                <div class="toggle-wrap">
+                  <label class="switch">
+                    <input type="checkbox" id="mls-toggle">
+                    <span class="slider-round"></span>
+                  </label>
+                </div>
+              </label>
+              <p class="watermark-helper-text" id="mls-hint">
+                When enabled: only ARMLS-approved watermarks, no custom uploads, corners only (no center), one watermark per photo.
+              </p>
+            </div>
+
             <!-- Watermark dropdown -->
             <div class="setting-group">
               <label class="setting-label" for="watermark-select">
@@ -196,7 +211,7 @@
                 <select id="watermark-select" class="custom-select glass-inner"></select>
                 <i class="fas fa-chevron-down select-icon"></i>
               </div>
-              <p class="watermark-helper-text">All options are loaded from <code>./assets/</code>. Default: rounded (white background).</p>
+              <p class="watermark-helper-text">Default: rounded (white background). MLS mode shows only ARMLS-approved options.</p>
             </div>
 
             <!-- Current Selection Preview -->
@@ -250,10 +265,10 @@
                 <label class="adjustment-label">
                   <i class="fas fa-adjust"></i>
                   Opacity
-                  <span class="setting-value" id="opacity-value">75%</span>
+                  <span class="setting-value" id="opacity-value">22%</span>
                 </label>
                 <div class="slider-wrapper">
-                  <input type="range" id="opacity-slider" class="custom-slider" min="10" max="100" value="75">
+                  <input type="range" id="opacity-slider" class="custom-slider" min="0" max="100" value="22">
                 </div>
               </div>
 
@@ -271,7 +286,7 @@
             </div>
 
             <!-- Advanced Options Toggle -->
-            <div class="setting-group">
+            <div class="setting-group" id="advanced-wrapper">
               <button class="btn btn-secondary glass-btn w-full" id="advanced-toggle">
                 <i class="fas fa-chevron-down"></i>
                 Custom Watermark Upload
@@ -342,6 +357,20 @@
                 </button>
               </div>
             </div>
+
+            <!-- Quick Position (desktop only) -->
+            <div class="quick-controls" id="quick-controls">
+              <label for="position-select-quick">
+                <i class="fas fa-location-arrow"></i> Position (quick)
+              </label>
+              <select id="position-select-quick" class="custom-select glass-inner">
+                <option value="top-left">Top Left</option>
+                <option value="top-right">Top Right</option>
+                <option value="center" selected>Center</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="bottom-right">Bottom Right</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -349,7 +378,7 @@
         <div class="card glass-effect process-card">
           <div class="card-header">
             <h3>
-              <i class="fas fa-download"></i>
+              <i class="fas a-download"></i>
               <span class="step-label">Step 5:</span> Download
             </h3>
           </div>
@@ -426,7 +455,7 @@
              class="footer-logo"
              loading="lazy">
         <div class="footer-info">
-          <p>&copy; 2026   Watermark-It &bull;<strong> Fort Lowell Realty & Property Management</strong></p>
+          <p>&copy; 2026   Watermark-It • <strong>Fort Lowell Realty & Property Management</strong></p>
         </div>
       </div>
       <div class="footer-links">
@@ -489,15 +518,14 @@
               <p>Download all processed images as a batch. All images are exported as high-quality JPEGs.</p>
             </div>
           </div>
-        </div>
           <div class="help-step">
             <div class="help-number">6</div>
             <div class="help-content">
               <h4>Need help?</h4>
-              <p>If you're still experiencing issues, use the contact button at the bottom of the page.</P>
+              <p>If you're still experiencing issues, use the contact button at the bottom of the page.</p>
             </div>
-            </div> 
           </div>
+        </div>
 
         <div class="help-tips glass-inner">
           <h4><i class="fas fa-lightbulb"></i> Pro Tips</h4>
