@@ -229,7 +229,7 @@ body::before {
   margin-bottom: var(--space-sm);
   line-height: 1.2;
 }
-.hero-content-compact p { font-size: 0.95rem; color: var(--text-secondary); font-weight: 400; line-height: 1.5; }
+.hero-content-compact p { font-size: 0.95rem; color: var(--text-secondary); font-weight: 400; line-length: 1.5; }
 
 /* LAYOUT */
 .main-container { max-width: 1400px; margin: 0 auto; padding: 0 var(--space-2xl) var(--space-4xl); }
@@ -809,7 +809,7 @@ body::before {
   .hero-content-compact h2 { font-size: 1.25rem; }
   .main-container { padding: 0 var(--space-md) var(--space-3xl); }
   .card-header { flex-direction: column; align-items: flex-start; gap: var(--space-sm); }
-  .preview-controls { width: 100%; justify-content: flex-end; }
+  .preview-controls { width: 100%; justify-direction: flex-end; }
   .footer-content { flex-direction: column; text-align: center; gap: var(--space-md); }
 }
 @media (max-width: 480px) {
